@@ -5,6 +5,8 @@ from matplotlib import pyplot as plt
 import time
 import mediapipe as mp
 
+DATA_PATH = os.path.join("MP_Data")
+
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 
@@ -43,6 +45,18 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
 
         # Draw landmarks
         draw_landmarks(image, results)
+
+        # Setting Up Folder for Data Collection ------------------------------------------------- #
+        actions = np.array(["straight_ahead", "turn_left", "turn_right"])
+        no_sequences = 30  # 30 videos worth of data
+        sequence_length = 30  # 30 frames in length
+
+        for action in actions:
+            for sequence in range(no_sequences):
+                try:
+                    os.makedirs(os.path.join(DATA_PATH, action, str(sequence)))
+                except:
+                    pass
 
         # Show screen
         cv2.imshow("AeroVision", image)
