@@ -33,9 +33,9 @@ def preprocess_data():
 
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.05)
 
-    # print(x_train.shape)  # (85, 30, 132)
-    # print(x_test.shape)  # (5, 30, 132)
-    # print(y_train.shape)  # (85, 3)
-    # print(y_test.shape)  # (5, 3)
+    # print(x_train.shape)  # (85, 30, 132)  -->  (171, 30, 132)
+    # print(x_test.shape)  # (5, 30, 132)  -->  (9, 30, 132)
+    # print(y_train.shape)  # (85, 3)  -->  (171, 3)
+    # print(y_test.shape)  # (5, 3)  -->  (9, 3)
 
     return [x_train, x_test, y_train, y_test]
