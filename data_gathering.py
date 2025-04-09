@@ -5,7 +5,7 @@ import mediapipe as mp
 
 # Setup folder/s for data collection
 DATA_PATH = os.path.join("MP_Data")
-actions = np.array(["straight_ahead", "turn_left", "turn_right"])
+actions = np.array(["turn_left"])
 no_sequences = 30  # 30 videos worth of data
 sequence_length = 30  # 30 frames in length
 
@@ -39,11 +39,15 @@ def extract_keypoints(results):
 
 def setup_datacollection_folder():
     for action in actions:
-        for sequence in range(no_sequences):
-            try:
-                os.makedirs(os.path.join(DATA_PATH, action, str(sequence)))
-            except:
-                pass
+        try:
+            os.makedirs(os.path.join(DATA_PATH, action))
+        except:
+            pass
+        # for sequence in range(no_sequences):
+        #     try:
+        #         os.makedirs(os.path.join(DATA_PATH, action, str(sequence)))
+        #     except:
+        #         pass
 
 
 # Setup Folders for Data Collection
@@ -74,13 +78,17 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA
                     )
                     print("STARTING COLLECTION")
-                    # cv2.waitKey(3000)
+                    # cv2.waitKey(1000)
                 else:
                     cv2.putText(
                         image, "Collecting frames for {} Video Number {}".format(action, sequence), (15, 12),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA
                     )
                     print("Collecting frames for {} Video Number {}".format(action, sequence))
+
+                # 
+                if sequence == no_sequences:
+                    cv2.waitKey(3000)
 
                 # Export keypoints
                 keypoints = extract_keypoints(results)
