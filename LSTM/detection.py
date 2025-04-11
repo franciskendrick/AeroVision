@@ -12,7 +12,7 @@ signal = ""
 threshold = 0.4
 
 actions = np.array(["straight_ahead", "turn_left", "turn_right"])
-model = load_model("action.h5")
+model = load_model("LSTM/action.h5")
 
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
@@ -76,7 +76,7 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
             if np.unique(predictions[-10:][0] == np.argmax(res)):
                 signal = actions[np.argmax(res)]
 
-            image = prob_viz(res, actions, image, colors)
+            # image = prob_viz(res, actions, image, colors)
 
         cv2.putText(
             image, signal, (3, 30), 

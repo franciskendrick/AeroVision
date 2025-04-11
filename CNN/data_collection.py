@@ -28,7 +28,7 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
 
         # Collect data
         try:
-            class_name = "turn_right"
+            class_name = "start_engine"
 
             pose = results.pose_landmarks.landmark
             pose_row = list(np.array([[landmark.x, landmark.y, landmark.z, landmark.visibility] for landmark in pose]).flatten())
