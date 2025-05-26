@@ -40,23 +40,47 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
             a = (lm[11].x * w, lm[11].y * h)
             b = (lm[13].x * w, lm[13].y * h)
             c = (lm[23].x * w, lm[23].y * h)
-            angle_left = calculate_angle(a, b, c)
-            print("Left:", angle_left)
+            angle_leftshoulder = calculate_angle(a, b, c)
 
             cx, cy = int(a[0]), int(a[1])
-            cv2.putText(image, str(angle_left), (cx, cy + 30), cv2.FONT_HERSHEY_SIMPLEX,
+            cv2.putText(image, str(angle_leftshoulder), (cx, cy + 30), cv2.FONT_HERSHEY_SIMPLEX,
                         1, (255, 255, 255), 2, cv2.LINE_AA)
 
             # Right shoulder angle (12, 14, 24)
             a = (lm[12].x * w, lm[12].y * h)
             b = (lm[14].x * w, lm[14].y * h)
             c = (lm[24].x * w, lm[24].y * h)
-            angle_right = calculate_angle(a, b, c, "left")
-            print("Right:", angle_right)
+            angle_rightshoulder = calculate_angle(a, b, c, "left")
 
             cx_r, cy_r = int(a[0]), int(a[1])
-            cv2.putText(image, str(angle_right), (cx_r, cy_r + 30), cv2.FONT_HERSHEY_SIMPLEX,
+            cv2.putText(image, str(angle_rightshoulder), (cx_r, cy_r + 30), cv2.FONT_HERSHEY_SIMPLEX,
                         1, (255, 255, 255), 2, cv2.LINE_AA)
+            
+            # print(f"LeftShoulder: {angle_leftshoulder}, RightShoulder: {angle_rightshoulder}")
+
+            # ----------------------------------------------------------------------------------- #
+
+            # Left elbow angle (11, 13, 15)
+            a = (lm[11].x * w, lm[11].y * h)
+            b = (lm[13].x * w, lm[13].y * h)
+            c = (lm[15].x * w, lm[15].y * h)
+            angle_leftelbow = calculate_angle(a, b, c, "left")
+
+            cx, cy = int(b[0]), int(b[1])
+            cv2.putText(image, str(angle_leftelbow), (cx, cy + 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (255, 255, 255), 2, cv2.LINE_AA)
+            
+            # Right shoulder angle (12, 14, 16)
+            a = (lm[12].x * w, lm[12].y * h)
+            b = (lm[14].x * w, lm[14].y * h)
+            c = (lm[16].x * w, lm[16].y * h)
+            angle_rightshoulder = calculate_angle(a, b, c)
+
+            cx_r, cy_r = int(b[0]), int(b[1])
+            cv2.putText(image, str(angle_rightshoulder), (cx_r, cy_r + 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (255, 255, 255), 2, cv2.LINE_AA)
+            
+            # print(f"LeftElbow: {angle_leftelbow}, RightElbow: {angle_rightshoulder}")
 
         cv2.imshow('Pose Landmarks', image)
 
