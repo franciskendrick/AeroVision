@@ -2,6 +2,18 @@ import cv2
 import mediapipe as mp
 import math
 
+# CSV file should have the following columns:
+# 11x 11y 11z
+# 12x 12y 12z
+# 13x 13y 13z
+# 14x 14y 14z
+# 15x 15y 15z
+# 16x 16y 16z
+# 23x 23y 23z
+# 24x 24y 24z
+# lshoul rshoul
+# lelbow relbow
+
 
 def calculate_angle(a, b, c, direction="right"):
     ba = [a[0] - b[0], a[1] - b[1]]
@@ -56,8 +68,6 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
             cv2.putText(image, str(angle_rightshoulder), (cx_r, cy_r + 30), cv2.FONT_HERSHEY_SIMPLEX,
                         1, (255, 255, 255), 2, cv2.LINE_AA)
             
-            # print(f"LeftShoulder: {angle_leftshoulder}, RightShoulder: {angle_rightshoulder}")
-
             # ----------------------------------------------------------------------------------- #
 
             # Left elbow angle (11, 13, 15)
@@ -80,7 +90,11 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
             cv2.putText(image, str(angle_rightshoulder), (cx_r, cy_r + 30), cv2.FONT_HERSHEY_SIMPLEX,
                         1, (255, 255, 255), 2, cv2.LINE_AA)
             
-            # print(f"LeftElbow: {angle_leftelbow}, RightElbow: {angle_rightshoulder}")
+            # ----------------------------------------------------------------------------------- #
+
+            # creates a csv file
+
+            # ----------------------------------------------------------------------------------- #
 
         cv2.imshow('Pose Landmarks', image)
 
