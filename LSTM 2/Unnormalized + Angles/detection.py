@@ -12,7 +12,7 @@ from keras._tf_keras.keras.models import load_model
 ACTIONS = ["straight_ahead", "turn_left", "turn_right"]
 
 # 2) Path to your trained model (adjust if necessary)
-MODEL_PATH = "D:\Programming Projects\Repositories\AeroVision\Angles/action.h5"
+MODEL_PATH = "D:\Programming Projects\Repositories\AeroVision\LSTM 2\Unnormalized + Angles/action.h5"
 
 # 3) How many frames to buffer before making one prediction
 SEQUENCE_LENGTH = 30

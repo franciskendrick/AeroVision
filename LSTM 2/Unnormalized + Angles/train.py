@@ -3,10 +3,10 @@ from keras._tf_keras.keras.layers import LSTM, Dense, Dropout
 import numpy as np
 
 # 1) Load preprocessed data
-x_train = np.load("D:\Programming Projects\Repositories\AeroVision\Angles/npy files/x_train.npy")
-x_test  = np.load("D:\Programming Projects\Repositories\AeroVision\Angles/npy files/x_test.npy")
-y_train = np.load("D:\Programming Projects\Repositories\AeroVision\Angles/npy files/y_train.npy")
-y_test  = np.load("D:\Programming Projects\Repositories\AeroVision\Angles/npy files/y_test.npy")
+x_train = np.load("D:\Programming Projects\Repositories\AeroVision\LSTM 2/npy files/x_train.npy")
+x_test  = np.load("D:\Programming Projects\Repositories\AeroVision\LSTM 2/npy files/x_test.npy")
+y_train = np.load("D:\Programming Projects\Repositories\AeroVision\LSTM 2/npy files/y_train.npy")
+y_test  = np.load("D:\Programming Projects\Repositories\AeroVision\LSTM 2/npy files/y_test.npy")
 
 sequence_length, num_features = x_train.shape[1], x_train.shape[2]
 

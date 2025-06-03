@@ -5,7 +5,7 @@ from keras._tf_keras.keras.utils import to_categorical
 
 
 # 1) Load your single CSV
-df = pd.read_csv("D:\Programming Projects\Repositories\AeroVision\Angles\data.csv")
+df = pd.read_csv("D:\Programming Projects\Repositories\AeroVision\LSTM 2\data.csv")
 
 
 # 2) Check total rows = 2700 (90 sequences × 30 frames)
