@@ -36,14 +36,17 @@ def loop():
 if __name__ == "__main__":
     pygame.init()
 
-    win_size = (640, 360)
-    win = pygame.display.set_mode(win_size, pygame.RESIZABLE)
-    pygame.display.set_caption("Ground Aircraft Marshalling Simulator")
-
     resources_path = os.path.abspath(
         os.path.join(
             os.path.dirname(__file__), "resources"
         )
     )
+
+    win_size = (640, 360)
+    win = pygame.display.set_mode(win_size, pygame.RESIZABLE)
+    pygame.display.set_caption("Ground Aircraft Marshalling Simulator")
+
+    icon = pygame.image.load(f"{resources_path}/icon.png")
+    pygame.display.set_icon(icon)
 
     loop()
