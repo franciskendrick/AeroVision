@@ -3,100 +3,130 @@ import sys
 import os
 
 
-def init_font(win_size):
-    # Scale fonts proportionally to height
-    base_height = 360
-    scale = win_size[1] / base_height
-    garamond_size = int(54 * scale)
-    franklinbig_size = int(112 * scale)
-    franklinsmall_size = int(20 * scale)
-    spacing = int(-5 * scale)
+class Menu:
+    def __init__(self, win_size):
+        self.init_scale(win_size)
+        self.init(win_size)
 
-    garamond = pygame.font.SysFont("Garamond", garamond_size, bold=True)
-    franklingothic_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", franklinbig_size, bold=False)
-    franklingothic_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", franklinsmall_size, bold=False)
+    def init_scale(self, win_size):
+        base_height = 360
+        self.scale = win_size[1] / base_height
 
-    # Render header texts
-    texts = [
-        garamond.render("GROUND", True, (22, 33, 68)),
-        garamond.render("AIRCRAFT", True, (22, 33, 68)),
-        garamond.render("MARSHALLING", True, (22, 33, 68)),
-        franklingothic_big.render("SIMULATOR", True, (66, 140, 226)),
-    ]
+    def init(self, win_size):
+        garamond_size = int(54 * self.scale)
+        franklinbig_size = int(112 * self.scale)
+        franklinsmall_size = int(20 * self.scale)
+        spacing = int(-5 * self.scale)
 
-    # Render button texts
-    buttons = [
-        franklingothic_small.render("CONNECT TO PROTOTYPE", True, (0, 0, 0)),
-        franklingothic_small.render("START", True, (0, 0, 0))
-    ]
+        garamond = pygame.font.SysFont("Garamond", garamond_size, bold=True)
+        franklingothic_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", franklinbig_size, bold=False)
+        franklingothic_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", franklinsmall_size, bold=False)
 
-    # Stack the text positions vertically, centered
-    total_height = sum(text.get_rect().height for text in texts) + spacing * (len(texts) - 1)
-    start_y = win_size[1] // 2 - total_height // 2
+        self.spacing = spacing
 
-    text_positions = []
-    current_y = start_y
-    for text in texts:
-        rect = text.get_rect()
-        x = win_size[0] // 2 - rect.width // 2
-        text_positions.append((x, current_y))
-        current_y += rect.height + spacing
+        self.texts = [
+            garamond.render("GROUND", True, (22, 33, 68)),
+            garamond.render("AIRCRAFT", True, (22, 33, 68)),
+            garamond.render("MARSHALLING", True, (22, 33, 68)),
+            franklingothic_big.render("SIMULATOR", True, (66, 140, 226))
+        ]
 
-    # Get SIMULATOR's rect to use as horizontal reference
-    simulator_rect = texts[-1].get_rect()
-    simulator_x = win_size[0] // 2 - simulator_rect.width // 2
-    simulator_right = simulator_x + simulator_rect.width
+        self.button_texts = [
+            franklingothic_small.render("CONNECT TO PROTOTYPE", True, (0, 0, 0)),
+            franklingothic_small.render("START", True, (0, 0, 0))
+        ]
 
-    # Calculate button vertical position
-    button_y = current_y  # current_y is already after "SIMULATOR" + spacing
+        # Reference left and right from "MARSHALLING"
+        marshalling_rect = self.texts[2].get_rect()
+        marshalling_x = win_size[0] // 2 - marshalling_rect.width // 2
+        marshalling_right = marshalling_x + marshalling_rect.width
 
-    # Left button
-    btn1_text = buttons[0]
-    btn1_rect = btn1_text.get_rect()
-    btn1_x = simulator_x
-    btn1_rect.topleft = (btn1_x, button_y)
+        # Get text and button total height
+        text_heights = sum(t.get_rect().height for t in self.texts)
+        button_height = max(btn.get_rect().height for btn in self.button_texts)
+        total_spacing = self.spacing * (len(self.texts) - 1) - (self.spacing * 6)
 
-    # Right button
-    btn2_text = buttons[1]
-    btn2_rect = btn2_text.get_rect()
-    btn2_x = simulator_right - btn2_rect.width
-    btn2_rect.topleft = (btn2_x, button_y)
+        total_height = text_heights + button_height + total_spacing
+        start_y = win_size[1] // 2 - total_height // 2
 
-    button_rects = [
-        btn1_rect.inflate(20, 12),  # Add padding for background rect
-        btn2_rect.inflate(20, 12)
-    ]
+        # TEXT POSITIONS
+        self.text_positions = []
+        current_y = start_y
+        for text in self.texts:
+            rect = text.get_rect()
+            x = win_size[0] // 2 - rect.width // 2
+            self.text_positions.append((x, current_y))
+            current_y += rect.height + self.spacing
+        else:
+            current_y -= self.spacing * 6
 
-    button_positions = [
-        (btn1_rect.x, btn1_rect.y),
-        (btn2_rect.x, btn2_rect.y)
-    ]
+        # BUTTON POSITIONS (after SIMULATOR)
+        btn1_text = self.button_texts[0]
+        btn2_text = self.button_texts[1]
+        btn1_rect = btn1_text.get_rect()
+        btn2_rect = btn2_text.get_rect()
 
-    return texts, text_positions, buttons, button_positions, button_rects
+        # Fixed button height and vertical alignment
+        button_y = current_y
+
+        btn1_x = marshalling_x  # align left with MARSHALLING
+        btn2_x = marshalling_right - btn2_rect.width  # align right with MARSHALLING
+
+        self.button_text_positions = [
+            (btn1_x, button_y),
+            (btn2_x, button_y)
+        ]
+
+        # Button background rects with padding
+        base_padding_w = 25
+        base_padding_h = 20
+        padding_w = int(base_padding_w * self.scale)
+        padding_h = int(base_padding_h * self.scale)
+
+        self.button_rects = [
+            pygame.Rect(
+                btn1_x - (padding_w // 2),
+                button_y - (padding_h // 2),
+                btn1_rect.width + padding_w,
+                btn1_rect.height + padding_h
+            ),
+            pygame.Rect(
+                btn2_x - (padding_w // 2),
+                button_y - (padding_h // 2),
+                btn2_rect.width + padding_w,
+                btn2_rect.height + padding_h
+            )
+        ]
+
+    def draw(self, win):
+        # Draw texts
+        for text, pos in zip(self.texts, self.text_positions):
+            win.blit(text, pos)
+
+        # Dynamic border width
+        border_width = max(1, round(2 * self.scale))
+
+        # Draw button background rects
+        for rect in self.button_rects:
+            pygame.draw.rect(win, (255, 255, 255), rect)
+            pygame.draw.rect(win, (0, 0, 0), rect, border_width)
+
+        # Draw button texts
+        for text, pos in zip(self.button_texts, self.button_text_positions):
+            win.blit(text, pos)
 
 
 def redraw():
     win.blit(background, (0, 0))
 
     # Draw main texts
-    for text, pos in zip(texts, text_positions):
-        win.blit(text, pos)
-
-    # Draw buttons with background rectangles
-    for button_rect in button_rects:
-        pygame.draw.rect(win, (255, 255, 255), button_rect, border_radius=1)  # white background with rounded corners
-        pygame.draw.rect(win, (0, 0, 0), button_rect, 2, border_radius=1)     # black border
-
-    for btn_text, btn_pos in zip(buttons, button_positions):
-        win.blit(btn_text, btn_pos)
+    menu.draw(win)
 
     pygame.display.update()
 
 
 def loop():
-    global background, texts, text_positions, buttons, button_positions, button_rects
-
-    texts, text_positions, buttons, button_positions, button_rects = init_font(win_size)
+    global background
 
     background = pygame.image.load(f"{resources_path}/background.png")
     background = pygame.transform.scale(background, win_size)
@@ -111,7 +141,9 @@ def loop():
                 background = pygame.image.load(f"{resources_path}/background.png")
                 background = pygame.transform.scale(background, event.dict["size"])
 
-                texts, text_positions, buttons, button_positions, button_rects = init_font(event.dict["size"])
+                # texts, text_positions, buttons, button_positions, button_rects = init_font(event.dict["size"])
+                menu.init_scale(event.dict["size"])
+                menu.init(event.dict["size"])
 
         redraw()
     
@@ -134,5 +166,7 @@ if __name__ == "__main__":
 
     icon = pygame.image.load(f"{resources_path}/icon.png")
     pygame.display.set_icon(icon)
+
+    menu = Menu(win_size)
 
     loop()
