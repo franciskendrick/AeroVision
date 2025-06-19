@@ -138,12 +138,18 @@ def loop():
                 run = False
 
             elif event.type == pygame.VIDEORESIZE:
-                background = pygame.image.load(f"{resources_path}/background.png")
-                background = pygame.transform.scale(background, event.dict["size"])
+                # Enforce minimum size of 640x360
+                new_width = max(640, event.w)
+                new_height = max(360, event.h)
+                new_size = (new_width, new_height)
 
-                # texts, text_positions, buttons, button_positions, button_rects = init_font(event.dict["size"])
-                menu.init_scale(event.dict["size"])
-                menu.init(event.dict["size"])
+                pygame.display.set_mode(new_size, pygame.RESIZABLE)
+
+                background = pygame.image.load(f"{resources_path}/background.png")
+                background = pygame.transform.scale(background, new_size)
+
+                menu.init_scale(new_size)
+                menu.init(new_size)
 
         redraw()
     
