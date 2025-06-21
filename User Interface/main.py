@@ -3,6 +3,13 @@ import sys
 import os
 
 
+class Buttons:
+    def __init__(self):
+        pass
+
+
+
+
 class Menu:
     def __init__(self, win_size):
         self.init_scale(win_size)
@@ -98,6 +105,9 @@ class Menu:
             )
         ]
 
+        # Button hover status
+        self.button_over_status = [False, False]
+
     def draw(self, win):
         # Draw texts
         for text, pos in zip(self.texts, self.text_positions):
@@ -107,13 +117,23 @@ class Menu:
         border_width = max(1, round(2 * self.scale))
 
         # Draw button background rects
-        for rect in self.button_rects:
-            pygame.draw.rect(win, (255, 255, 255), rect)
+        for is_hovered, rect in zip(self.button_over_status, self.button_rects):
+            btn_color = (192, 192, 192) if is_hovered else (240, 240, 240) 
+            pygame.draw.rect(win, btn_color, rect)
             pygame.draw.rect(win, (0, 0, 0), rect, border_width)
 
         # Draw button texts
         for text, pos in zip(self.button_texts, self.button_text_positions):
             win.blit(text, pos)
+
+    def button_down_detection(self, mouse_pos):
+        for hitbox in self.button_rects:
+            if hitbox.collidepoint(mouse_pos):
+                print(True)
+
+    def button_over_detection(self, mouse_pos):
+        for idx, hitbox in enumerate(self.button_rects):
+            self.button_over_status[idx] = True if hitbox.collidepoint(mouse_pos) else False
 
 
 def redraw():
@@ -150,6 +170,12 @@ def loop():
 
                 menu.init_scale(new_size)
                 menu.init(new_size)
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                menu.button_down_detection(mouse_pos)
+
+        mouse_pos = pygame.mouse.get_pos()
+        menu.button_over_detection(mouse_pos)
 
         redraw()
     
