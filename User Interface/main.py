@@ -3,13 +3,6 @@ import sys
 import os
 
 
-class Buttons:
-    def __init__(self):
-        pass
-
-
-
-
 class Menu:
     def __init__(self, win_size):
         self.init_scale(win_size)
@@ -31,109 +24,93 @@ class Menu:
 
         self.spacing = spacing
 
-        self.texts = [
+        # Title
+        raw_texts = [
             garamond.render("GROUND", True, (22, 33, 68)),
             garamond.render("AIRCRAFT", True, (22, 33, 68)),
             garamond.render("MARSHALLING", True, (22, 33, 68)),
             franklingothic_big.render("SIMULATOR", True, (66, 140, 226))
         ]
 
-        self.button_texts = [
-            franklingothic_small.render("CONNECT TO PROTOTYPE", True, (0, 0, 0)),
-            franklingothic_small.render("START", True, (0, 0, 0))
-        ]
+        self.texts = []
+        text_heights = sum(text.get_rect().height for text in raw_texts)
+        total_spacing = self.spacing * (len(raw_texts) - 1) - (self.spacing * 6)
+        start_y = win_size[1] // 2 - (text_heights + total_spacing) // 2
 
-        # Reference left and right from "MARSHALLING"
-        marshalling_rect = self.texts[2].get_rect()
+        current_y = start_y
+        for text in raw_texts:
+            rect = text.get_rect()
+            x = win_size[0] // 2 - rect.width // 2
+            self.texts.append([text, (x, current_y)])  # text, position
+            current_y += rect.height + self.spacing
+        else:
+            current_y -= self.spacing * 6  # add space before buttons
+
+        # Buttons
+        button_labels = ["CONNECT TO PROTOTYPE", "START"]
+        button_surfaces = [franklingothic_small.render(label, True, (0, 0, 0)) for label in button_labels]
+
+        # Align to MARSHALLING
+        marshalling_surface = self.texts[2][0]
+        marshalling_rect = marshalling_surface.get_rect()
         marshalling_x = win_size[0] // 2 - marshalling_rect.width // 2
         marshalling_right = marshalling_x + marshalling_rect.width
 
-        # Get text and button total height
-        text_heights = sum(t.get_rect().height for t in self.texts)
-        button_height = max(btn.get_rect().height for btn in self.button_texts)
-        total_spacing = self.spacing * (len(self.texts) - 1) - (self.spacing * 6)
-
-        total_height = text_heights + button_height + total_spacing
-        start_y = win_size[1] // 2 - total_height // 2
-
-        # TEXT POSITIONS
-        self.text_positions = []
-        current_y = start_y
-        for text in self.texts:
-            rect = text.get_rect()
-            x = win_size[0] // 2 - rect.width // 2
-            self.text_positions.append((x, current_y))
-            current_y += rect.height + self.spacing
-        else:
-            current_y -= self.spacing * 6
-
-        # BUTTON POSITIONS (after SIMULATOR)
-        btn1_text = self.button_texts[0]
-        btn2_text = self.button_texts[1]
-        btn1_rect = btn1_text.get_rect()
-        btn2_rect = btn2_text.get_rect()
-
-        # Fixed button height and vertical alignment
-        button_y = current_y
-
-        btn1_x = marshalling_x  # align left with MARSHALLING
-        btn2_x = marshalling_right - btn2_rect.width  # align right with MARSHALLING
-
-        self.button_text_positions = [
-            (btn1_x, button_y),
-            (btn2_x, button_y)
-        ]
-
-        # Button background rects with padding
-        base_padding_w = 25
-        base_padding_h = 20
+        base_padding_w, base_padding_h = 25, 20
         padding_w = int(base_padding_w * self.scale)
         padding_h = int(base_padding_h * self.scale)
 
-        self.button_rects = [
-            pygame.Rect(
-                btn1_x - (padding_w // 2),
-                button_y - (padding_h // 2),
-                btn1_rect.width + padding_w,
-                btn1_rect.height + padding_h
-            ),
-            pygame.Rect(
-                btn2_x - (padding_w // 2),
-                button_y - (padding_h // 2),
-                btn2_rect.width + padding_w,
-                btn2_rect.height + padding_h
-            )
-        ]
+        self.buttons = []
+        for i, surface in enumerate(button_surfaces):
+            text_rect = surface.get_rect()
+            if i == 0:
+                open_status = True
+                x = marshalling_x
+            else:
+                open_status = False
+                x = marshalling_right - text_rect.width
 
-        # Button hover status
-        self.button_over_status = [False, False]
+            y = current_y
+
+            button_rect = pygame.Rect(
+                x - (padding_w // 2),
+                y - (padding_h // 2),
+                text_rect.width + padding_w,
+                text_rect.height + padding_h
+            )
+
+            # Center text within padded rect
+            text_x = button_rect.x + (button_rect.width - text_rect.width) // 2
+            text_y = button_rect.y + (button_rect.height - text_rect.height) // 2
+
+            self.buttons.append([False, open_status, surface, (text_x, text_y), button_rect])  # is_hovered, is_open, text, text pos, button rect
 
     def draw(self, win):
-        # Draw texts
-        for text, pos in zip(self.texts, self.text_positions):
-            win.blit(text, pos)
+        # Draw text
+        for text_surface, pos in self.texts:
+            win.blit(text_surface, pos)
 
-        # Dynamic border width
+        # Draw buttons
         border_width = max(1, round(2 * self.scale))
+        for is_hovered, is_open, text, text_pos, btn_rect in self.buttons:
+            if is_open:
+                fill = (192, 192, 192) if is_hovered else (240, 240, 240)
+            else:
+                fill = (132, 132, 132)
+            
+            pygame.draw.rect(win, fill, btn_rect)
+            pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
 
-        # Draw button background rects
-        for is_hovered, rect in zip(self.button_over_status, self.button_rects):
-            btn_color = (192, 192, 192) if is_hovered else (240, 240, 240) 
-            pygame.draw.rect(win, btn_color, rect)
-            pygame.draw.rect(win, (0, 0, 0), rect, border_width)
-
-        # Draw button texts
-        for text, pos in zip(self.button_texts, self.button_text_positions):
-            win.blit(text, pos)
+            win.blit(text, text_pos)
 
     def button_down_detection(self, mouse_pos):
-        for hitbox in self.button_rects:
-            if hitbox.collidepoint(mouse_pos):
+        for *_, btn_rect in self.buttons:
+            if btn_rect.collidepoint(mouse_pos):
                 print(True)
 
     def button_over_detection(self, mouse_pos):
-        for idx, hitbox in enumerate(self.button_rects):
-            self.button_over_status[idx] = True if hitbox.collidepoint(mouse_pos) else False
+        for button in self.buttons:
+            button[0] = button[4].collidepoint(mouse_pos)
 
 
 def redraw():
