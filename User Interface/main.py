@@ -11,8 +11,10 @@ class Menu:
         self.init_popup(win_size)
 
     def init_scale(self, win_size):
-        base_height = 360
-        self.scale = win_size[1] / base_height
+        base_width, base_height = 640, 360
+        scale_w = win_size[0] / base_width
+        scale_h = win_size[1] / base_height
+        self.scale = min(scale_w, scale_h)
 
     def init_menu(self, win_size):
         garamond_size = int(54 * self.scale)
@@ -99,12 +101,10 @@ class Menu:
         self.popup_width = max(s.get_width() for s in self.popup_surfaces) + int(40 * self.scale)
         self.popup_height = sum(s.get_height() for s in self.popup_surfaces) + int(10 * self.scale) * (len(self.popup_surfaces) - 2) + int(30 * self.scale)
 
-        win_w, _ = win_size
-        *_, btn_pos, _ = list(self.buttons.values())[0]
-
+        win_w, win_ht = win_size
         titlebar_height = int(22 * self.scale)
         popup_total_height = self.popup_height + titlebar_height
-        vertical_center = btn_pos[1] // 2 - popup_total_height // 2
+        vertical_center = (win_ht - popup_total_height) // 2 - (18 * self.scale)
 
         popup_titlebar_rect = pygame.Rect(
             (win_w - self.popup_width) // 2,
