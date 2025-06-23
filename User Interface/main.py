@@ -1,11 +1,16 @@
 import pygame
+import cv2
 import sys
 import os
 
 
 class Menu: 
     def __init__(self, win_size):
+        background = pygame.image.load(f"{resources_path}/background.png")
+        self.background = pygame.transform.scale(background, win_size)
+
         self.popup_active = False
+
         self.init_scale(win_size)
         self.init_menu(win_size)
         self.init_popup(win_size)
@@ -144,6 +149,8 @@ class Menu:
         self.popup = [popup_titlebar_rect, popup_rect, popup_closebutton_text, popup_closebutton_rect, popup_closebutton_text_pos]
 
     def draw(self, win):
+        win.blit(self.background, (0, 0))
+        
         border_width = max(1, round(2 * self.scale))
 
         for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
@@ -174,7 +181,7 @@ class Menu:
         for label, (_, is_open, *_, btn_rect) in self.buttons.items():
             if is_open and btn_rect.collidepoint(mouse_pos):
                 return label
-            
+
     def popupbutton_down_detection(self, mouse_pos):
         if self.popup[3].collidepoint(mouse_pos):
             return True
@@ -184,21 +191,13 @@ class Menu:
             button[0] = button[4].collidepoint(mouse_pos)
 
 
-def redraw():
-    win.blit(background, (0, 0))
-
-    # Draw main texts
+def redraw_menu():
     menu.draw(win)
 
     pygame.display.update()
 
 
-def loop():
-    global background
-
-    background = pygame.image.load(f"{resources_path}/background.png")
-    background = pygame.transform.scale(background, win_size)
-
+def menu_loop():
     run = True
     while run:
         for event in pygame.event.get():
@@ -244,7 +243,7 @@ def loop():
         mouse_pos = pygame.mouse.get_pos()
         menu.menubutton_over_detection(mouse_pos)
 
-        redraw()
+        redraw_menu()
     
     pygame.quit()
     sys.exit()
@@ -266,6 +265,8 @@ if __name__ == "__main__":
     icon = pygame.image.load(f"{resources_path}/icon.png")
     pygame.display.set_icon(icon)
 
-    menu = Menu(win_size)
+    # menu = Menu(win_size)
 
-    loop()
+    # assessment_loop()
+
+    cap = cv2.VideoCapture(0)
