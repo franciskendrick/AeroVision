@@ -3,16 +3,18 @@ import sys
 import os
 
 
-class Menu:
+class Menu: 
     def __init__(self, win_size):
+        self.popup_active = False
         self.init_scale(win_size)
-        self.init(win_size)
+        self.init_menu(win_size)
+        self.init_popup(win_size)
 
     def init_scale(self, win_size):
         base_height = 360
         self.scale = win_size[1] / base_height
 
-    def init(self, win_size):
+    def init_menu(self, win_size):
         garamond_size = int(54 * self.scale)
         franklinbig_size = int(112 * self.scale)
         franklinsmall_size = int(20 * self.scale)
@@ -24,7 +26,6 @@ class Menu:
 
         self.spacing = spacing
 
-        # Title
         raw_texts = [
             garamond.render("GROUND", True, (22, 33, 68)),
             garamond.render("AIRCRAFT", True, (22, 33, 68)),
@@ -41,16 +42,14 @@ class Menu:
         for text in raw_texts:
             rect = text.get_rect()
             x = win_size[0] // 2 - rect.width // 2
-            self.texts.append([text, (x, current_y)])  # text, position
+            self.texts.append([text, (x, current_y)])
             current_y += rect.height + self.spacing
         else:
-            current_y -= self.spacing * 6  # add space before buttons
+            current_y -= self.spacing * 6
 
-        # Buttons
         button_labels = ["CONNECT TO PROTOTYPE", "START"]
         button_surfaces = [franklingothic_small.render(label, True, (0, 0, 0)) for label in button_labels]
 
-        # Align to MARSHALLING
         marshalling_surface = self.texts[2][0]
         marshalling_rect = marshalling_surface.get_rect()
         marshalling_x = win_size[0] // 2 - marshalling_rect.width // 2
@@ -60,10 +59,10 @@ class Menu:
         padding_w = int(base_padding_w * self.scale)
         padding_h = int(base_padding_h * self.scale)
 
-        self.buttons = []
-        for i, surface in enumerate(button_surfaces):
+        self.buttons = {}
+        for idx, (label, surface) in enumerate(zip(button_labels, button_surfaces)):
             text_rect = surface.get_rect()
-            if i == 0:
+            if idx == 0:
                 open_status = True
                 x = marshalling_x
             else:
@@ -79,37 +78,106 @@ class Menu:
                 text_rect.height + padding_h
             )
 
-            # Center text within padded rect
             text_x = button_rect.x + (button_rect.width - text_rect.width) // 2
             text_y = button_rect.y + (button_rect.height - text_rect.height) // 2
 
-            self.buttons.append([False, open_status, surface, (text_x, text_y), button_rect])  # is_hovered, is_open, text, text pos, button rect
+            self.buttons[label] = [False, open_status, surface, (text_x, text_y), button_rect]
+
+    def init_popup(self, win_size):
+        popup_lines = [
+            "CONNECTED SUCCESSFULLY TO",
+            "PROTOTYPE AIRCRAFT!",
+            "",
+            "PLEASE PRESS",
+            "THE START BUTTON TO CONTINUE",
+            "ASSESSMENT AND TRAINING."
+        ]
+
+        font = pygame.font.SysFont("Franklin Gothic Medium Condensed", int(32 * self.scale))
+        self.popup_surfaces = [font.render(line, True, (0, 0, 0)) for line in popup_lines]
+
+        self.popup_width = max(s.get_width() for s in self.popup_surfaces) + int(40 * self.scale)
+        self.popup_height = sum(s.get_height() for s in self.popup_surfaces) + int(10 * self.scale) * (len(self.popup_surfaces) - 2) + int(30 * self.scale)
+
+        win_w, _ = win_size
+        *_, btn_pos, _ = list(self.buttons.values())[0]
+
+        titlebar_height = int(22 * self.scale)
+        popup_total_height = self.popup_height + titlebar_height
+        vertical_center = btn_pos[1] // 2 - popup_total_height // 2
+
+        popup_titlebar_rect = pygame.Rect(
+            (win_w - self.popup_width) // 2,
+            vertical_center,
+            self.popup_width,
+            titlebar_height
+        )
+
+        popup_rect = pygame.Rect(
+            (win_w - self.popup_width) // 2,
+            vertical_center + titlebar_height,
+            self.popup_width,
+            self.popup_height
+        )
+
+        bahnschrift = pygame.font.SysFont("Bahnschrift", int(16 * self.scale), bold=False)
+        popup_closebutton_text = bahnschrift.render("X", True, (0, 0, 0))
+        close_text_rect = popup_closebutton_text.get_rect()
+
+        pad_x = int(8 * self.scale)
+        pad_y = int(2 * self.scale)
+        button_w = close_text_rect.width + 2 * pad_x
+        button_h = close_text_rect.height + 2 * pad_y
+
+        popup_closebutton_rect = pygame.Rect(
+            popup_titlebar_rect.right - button_w - int(5 * self.scale),
+            popup_titlebar_rect.centery - button_h // 2,
+            button_w,
+            button_h
+        )
+
+        popup_closebutton_text_pos = (
+            popup_closebutton_rect.x + (button_w - close_text_rect.width) // 2,
+            popup_closebutton_rect.y + (button_h - close_text_rect.height) // 2
+        )
+
+        self.pop_up = [popup_titlebar_rect, popup_rect, popup_closebutton_text, popup_closebutton_rect, popup_closebutton_text_pos]
 
     def draw(self, win):
-        # Draw text
-        for text_surface, pos in self.texts:
-            win.blit(text_surface, pos)
-
-        # Draw buttons
         border_width = max(1, round(2 * self.scale))
-        for is_hovered, is_open, text, text_pos, btn_rect in self.buttons:
-            if is_open:
-                fill = (192, 192, 192) if is_hovered else (240, 240, 240)
-            else:
-                fill = (132, 132, 132)
-            
+
+        for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
+            fill = (192, 192, 192) if is_hovered and is_open else \
+                   (240, 240, 240) if is_open else (132, 132, 132)
             pygame.draw.rect(win, fill, btn_rect)
             pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
-
             win.blit(text, text_pos)
 
+        if not self.popup_active:
+            for text_surface, pos in self.texts:
+                win.blit(text_surface, pos)
+            return
+
+        popup_titlebar_rect, popup_rect, popup_closebutton_text, popup_closebutton_rect, popup_closebutton_text_pos = self.pop_up
+        pygame.draw.rect(win, (255, 255, 255), popup_rect)
+        pygame.draw.rect(win, (192, 192, 192), popup_titlebar_rect)
+        pygame.draw.rect(win, (162, 162, 162), popup_closebutton_rect)
+        win.blit(popup_closebutton_text, popup_closebutton_text_pos)
+
+        cursor_y = popup_rect.y + int(10 * self.scale)
+        for idx, surf in enumerate(self.popup_surfaces):
+            x = popup_rect.x + (self.popup_width - surf.get_width()) // 2
+            win.blit(surf, (x, cursor_y))
+            if idx < len(self.popup_surfaces) - 1:
+                cursor_y += surf.get_height() + int(10 * self.scale)
+
     def button_down_detection(self, mouse_pos):
-        for *_, btn_rect in self.buttons:
-            if btn_rect.collidepoint(mouse_pos):
-                print(True)
+        for label, (_, is_open, *_, btn_rect) in self.buttons.items():
+            if is_open and btn_rect.collidepoint(mouse_pos):
+                return label
 
     def button_over_detection(self, mouse_pos):
-        for button in self.buttons:
+        for button in self.buttons.values():
             button[0] = button[4].collidepoint(mouse_pos)
 
 
@@ -149,7 +217,12 @@ def loop():
                 menu.init(new_size)
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                menu.button_down_detection(mouse_pos)
+                btn_label = menu.button_down_detection(mouse_pos)
+                if btn_label == "CONNECT TO PROTOTYPE":
+                    menu.popup_active = True
+                    menu.buttons["START"][1] = True
+                else:  # START
+                    pass
 
         mouse_pos = pygame.mouse.get_pos()
         menu.button_over_detection(mouse_pos)
