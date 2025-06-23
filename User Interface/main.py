@@ -141,7 +141,7 @@ class Menu:
             popup_closebutton_rect.y + (button_h - close_text_rect.height) // 2
         )
 
-        self.pop_up = [popup_titlebar_rect, popup_rect, popup_closebutton_text, popup_closebutton_rect, popup_closebutton_text_pos]
+        self.popup = [popup_titlebar_rect, popup_rect, popup_closebutton_text, popup_closebutton_rect, popup_closebutton_text_pos]
 
     def draw(self, win):
         border_width = max(1, round(2 * self.scale))
@@ -156,27 +156,30 @@ class Menu:
         if not self.popup_active:
             for text_surface, pos in self.texts:
                 win.blit(text_surface, pos)
-            return
+        else:
+            popup_titlebar_rect, popup_rect, popup_closebutton_text, popup_closebutton_rect, popup_closebutton_text_pos = self.popup
+            pygame.draw.rect(win, (255, 255, 255), popup_rect)
+            pygame.draw.rect(win, (192, 192, 192), popup_titlebar_rect)
+            pygame.draw.rect(win, (162, 162, 162), popup_closebutton_rect)
+            win.blit(popup_closebutton_text, popup_closebutton_text_pos)
 
-        popup_titlebar_rect, popup_rect, popup_closebutton_text, popup_closebutton_rect, popup_closebutton_text_pos = self.pop_up
-        pygame.draw.rect(win, (255, 255, 255), popup_rect)
-        pygame.draw.rect(win, (192, 192, 192), popup_titlebar_rect)
-        pygame.draw.rect(win, (162, 162, 162), popup_closebutton_rect)
-        win.blit(popup_closebutton_text, popup_closebutton_text_pos)
+            cursor_y = popup_rect.y + int(10 * self.scale)
+            for idx, surf in enumerate(self.popup_surfaces):
+                x = popup_rect.x + (self.popup_width - surf.get_width()) // 2
+                win.blit(surf, (x, cursor_y))
+                if idx < len(self.popup_surfaces) - 1:
+                    cursor_y += surf.get_height() + int(10 * self.scale)
 
-        cursor_y = popup_rect.y + int(10 * self.scale)
-        for idx, surf in enumerate(self.popup_surfaces):
-            x = popup_rect.x + (self.popup_width - surf.get_width()) // 2
-            win.blit(surf, (x, cursor_y))
-            if idx < len(self.popup_surfaces) - 1:
-                cursor_y += surf.get_height() + int(10 * self.scale)
-
-    def button_down_detection(self, mouse_pos):
+    def menubutton_down_detection(self, mouse_pos):
         for label, (_, is_open, *_, btn_rect) in self.buttons.items():
             if is_open and btn_rect.collidepoint(mouse_pos):
                 return label
+            
+    def popupbutton_down_detection(self, mouse_pos):
+        if self.popup[3].collidepoint(mouse_pos):
+            return True
 
-    def button_over_detection(self, mouse_pos):
+    def menubutton_over_detection(self, mouse_pos):
         for button in self.buttons.values():
             button[0] = button[4].collidepoint(mouse_pos)
 
@@ -217,15 +220,19 @@ def loop():
                 menu.init(new_size)
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                btn_label = menu.button_down_detection(mouse_pos)
+                btn_label = menu.menubutton_down_detection(mouse_pos)
                 if btn_label == "CONNECT TO PROTOTYPE":
                     menu.popup_active = True
                     menu.buttons["START"][1] = True
                 else:  # START
                     pass
 
+                if menu.popup_active:
+                    if menu.popupbutton_down_detection(mouse_pos):
+                        menu.popup_active = False
+
         mouse_pos = pygame.mouse.get_pos()
-        menu.button_over_detection(mouse_pos)
+        menu.menubutton_over_detection(mouse_pos)
 
         redraw()
     
