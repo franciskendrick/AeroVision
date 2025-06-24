@@ -17,6 +17,7 @@ class Game:
 
         self.init_scale(win_size)
         self.init_opencv(win_size)
+        self.init_rightpanel(win_size)
 
     def init_scale(self, win_size):
         base_width, base_height = 640, 360
@@ -49,6 +50,27 @@ class Game:
         pos_y = (win_size[1] - new_size[1]) // 2
         self.frame_draw_pos = (pos_x, pos_y)
 
+    def init_rightpanel(self, win_size):
+        cam_top_y = self.frame_draw_pos[1]
+        cam_bottom_y = cam_top_y + self.frame_draw_size[1]
+        right_x = win_size[0] // 2
+        panel_width = win_size[0] // 2
+        full_height = win_size[1]
+
+        self.rp_top_rect = pygame.Rect(right_x, 0, panel_width, cam_top_y)
+        self.rp_bottom_rect = pygame.Rect(right_x, cam_bottom_y, panel_width, full_height - cam_bottom_y)
+
+        # ── SIGNAL PREDICTION TEXT ──
+        font_size = int(self.rp_top_rect.height * 0.4)  # Scales with panel height
+        font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size, bold=False)
+
+        self.prediction_text = font.render("SIGNAL PREDICTION: NONE", True, (0, 0, 0))
+
+        text_rect = self.prediction_text.get_rect()
+        text_x = self.rp_top_rect.centerx - text_rect.width // 2
+        text_y = self.rp_top_rect.centery - text_rect.height // 2
+        self.prediction_text_pos = (text_x, text_y)
+
     def update_frame(self):
         ret, frame = self.cap.read()
         if not ret:
@@ -65,6 +87,11 @@ class Game:
         if self.frame_surface:
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
             win.blit(scaled_frame, self.frame_draw_pos)
+
+            pygame.draw.rect(win, (192, 192, 192), self.rp_top_rect)
+            pygame.draw.rect(win, (192, 192, 192), self.rp_bottom_rect)
+
+            win.blit(self.prediction_text, self.prediction_text_pos)
 
         pygame.display.update()
 
@@ -88,6 +115,7 @@ def game_loop():
                 pygame.display.set_mode(new_size, pygame.RESIZABLE)
                 game.init_scale(new_size)
                 game.init_opencv(new_size)
+                game.init_rightpanel(new_size)
 
         game.update_frame()
         game.draw()
