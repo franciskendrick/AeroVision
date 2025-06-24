@@ -1,13 +1,17 @@
+import mediapipe as mp
+import numpy as np
 import pygame
 import cv2
 import sys
 import os
-import numpy as np
 
 
 class Game:
     def __init__(self, win_size):
         self.cap = cv2.VideoCapture(0)
+        self.mp_pose = mp.solutions.pose
+        self.pose = self.mp_pose.Pose()
+        self.mp_drawing = mp.solutions.drawing_utils
         if not self.cap.isOpened():
             print("Could not open camera.")
             pygame.quit()
@@ -104,9 +108,21 @@ class Game:
             return
 
         frame = cv2.flip(frame, 1)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame = np.rot90(frame)
-        self.frame_surface = pygame.surfarray.make_surface(frame)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # MediaPipe Pose processing
+        results = self.pose.process(frame_rgb)
+        if results.pose_landmarks:
+            self.mp_drawing.draw_landmarks(
+                frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS,
+                landmark_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2),
+                connection_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2)
+            )
+
+        # Convert for Pygame (after drawing)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_rgb = np.rot90(frame_rgb)
+        self.frame_surface = pygame.surfarray.make_surface(frame_rgb)
 
     def draw(self):
         win.fill((0, 0, 0)) 
