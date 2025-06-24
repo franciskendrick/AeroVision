@@ -5,43 +5,67 @@ import os
 import numpy as np
 
 
-def redraw_game(frame_surface, win_size, win):
-    win.fill((0, 0, 0))  # Optional: clear screen with black
+class Game:
+    def __init__(self, win_size):
+        self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            print("Could not open camera.")
+            pygame.quit()
+            sys.exit()
 
-    # Split screen in half
-    half_width = win_size[0] // 2
-    full_height = win_size[1]
+        self.frame_surface = None
+        
+        self.init_scale(win_size)
 
-    # Draw vertical divider line (optional)
-    pygame.draw.line(win, (100, 100, 100), (half_width, 0), (half_width, full_height), 2)
+    def init_scale(self, win_size):
+        base_width, base_height = 640, 360
+        scale_w = win_size[0] / base_width
+        scale_h = win_size[1] / base_height
+        self.scale = min(scale_w, scale_h)
 
-    if frame_surface:
-        # Resize frame to fit inside right half (maintain aspect ratio)
-        cam_rect = frame_surface.get_rect()
+    def update_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        frame = cv2.flip(frame, 1)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = np.rot90(frame)
+        self.frame_surface = pygame.surfarray.make_surface(frame)
+
+    def draw(self, win):
+        win_size = win.get_size()
+        win.fill((0, 0, 0))  # Optional: clear screen
+
+        half_width = win_size[0] // 2
+        full_height = win_size[1]
+
+        # Vertical divider
+        pygame.draw.line(win, (100, 100, 100), (half_width, 0), (half_width, full_height), 2)
+
+        if not self.frame_surface:
+            return
+
+        cam_rect = self.frame_surface.get_rect()
         max_width = win_size[0] // 2
         max_height = win_size[1]
 
         scale = min(max_width / cam_rect.width, max_height / cam_rect.height)
         new_size = (int(cam_rect.width * scale), int(cam_rect.height * scale))
-        frame_surface = pygame.transform.smoothscale(frame_surface, new_size)
+        frame = pygame.transform.smoothscale(self.frame_surface, new_size)
 
-        # Center it in the right half
         pos_x = win_size[0] - new_size[0] // 2 - max_width // 2
         pos_y = (win_size[1] - new_size[1]) // 2
-        win.blit(frame_surface, (pos_x, pos_y))
+        win.blit(frame, (pos_x, pos_y))
 
-    pygame.display.update()
+        pygame.display.update()
+
+    def release(self):
+        self.cap.release()
 
 
 def game_loop():
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Could not open camera.")
-        pygame.quit()
-        sys.exit()
-
     run = True
-    frame_surface = None
 
     while run:
         for event in pygame.event.get():
@@ -49,21 +73,17 @@ def game_loop():
                 run = False
 
             elif event.type == pygame.VIDEORESIZE:
-                win_size = (max(640, event.w), max(360, event.h))
-                pygame.display.set_mode(win_size, pygame.RESIZABLE)
+                new_width = max(640, event.w)
+                new_height = max(360, event.h)
+                new_size = (new_width, new_height)
 
-        # Capture frame
-        ret, frame = cap.read()
-        if ret:
-            frame = cv2.flip(frame, 1)  # Optional: mirror the feed
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame = np.rot90(frame)  # Rotate if needed
-            frame_surface = pygame.surfarray.make_surface(frame)
+                pygame.display.set_mode(new_size, pygame.RESIZABLE)
+                game.init_scale(new_size)
 
-        win_size = pygame.display.get_surface().get_size()
-        redraw_game(frame_surface, win_size, pygame.display.get_surface())
+        game.update_frame()
+        game.draw(win)
 
-    cap.release()
+    game.release()
     pygame.quit()
     sys.exit()
 
@@ -72,9 +92,7 @@ if __name__ == "__main__":
     pygame.init()
 
     resources_path = os.path.abspath(
-        os.path.join(
-            os.path.dirname(__file__), "resources"
-        )
+        os.path.join(os.path.dirname(__file__), "resources")
     )
 
     win_size = (640, 360)
@@ -84,4 +102,5 @@ if __name__ == "__main__":
     icon = pygame.image.load(f"{resources_path}/icon.png")
     pygame.display.set_icon(icon)
 
+    game = Game(win_size)
     game_loop()

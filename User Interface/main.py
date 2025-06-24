@@ -265,8 +265,6 @@ if __name__ == "__main__":
     icon = pygame.image.load(f"{resources_path}/icon.png")
     pygame.display.set_icon(icon)
 
-    # menu = Menu(win_size)
+    menu = Menu(win_size)
 
-    # assessment_loop()
-
-    cap = cv2.VideoCapture(0)
+    menu_loop()
