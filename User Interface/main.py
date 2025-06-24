@@ -212,9 +212,6 @@ def menu_loop():
 
                 pygame.display.set_mode(new_size, pygame.RESIZABLE)
 
-                background = pygame.image.load(f"{resources_path}/background.png")
-                background = pygame.transform.scale(background, new_size)
-
                 # Save state
                 was_popup_active = menu.popup_active
                 start_button_state = menu.buttons["START"][1]  # True if it was open

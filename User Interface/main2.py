@@ -14,14 +14,40 @@ class Game:
             sys.exit()
 
         self.frame_surface = None
-        
+
         self.init_scale(win_size)
+        self.init_opencv(win_size)
 
     def init_scale(self, win_size):
         base_width, base_height = 640, 360
         scale_w = win_size[0] / base_width
         scale_h = win_size[1] / base_height
         self.scale = min(scale_w, scale_h)
+
+    def init_opencv(self, win_size):
+        # Use a dummy frame to calculate aspect ratio
+        ret, frame = self.cap.read()
+        if not ret:
+            print("Failed to read dummy frame for init.")
+            pygame.quit()
+            sys.exit()
+
+        frame = cv2.flip(frame, 1)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = np.rot90(frame)
+        dummy_surface = pygame.surfarray.make_surface(frame)
+
+        cam_rect = dummy_surface.get_rect()
+        max_width = win_size[0] // 2
+        max_height = win_size[1]
+
+        scale = min(max_width / cam_rect.width, max_height / cam_rect.height)
+        new_size = (int(cam_rect.width * scale), int(cam_rect.height * scale))
+        self.frame_draw_size = new_size
+
+        pos_x = win_size[0] - new_size[0] // 2 - max_width // 2
+        pos_y = (win_size[1] - new_size[1]) // 2
+        self.frame_draw_pos = (pos_x, pos_y)
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -33,30 +59,12 @@ class Game:
         frame = np.rot90(frame)
         self.frame_surface = pygame.surfarray.make_surface(frame)
 
-    def draw(self, win):
-        win_size = win.get_size()
-        win.fill((0, 0, 0))  # Optional: clear screen
+    def draw(self):
+        win.fill((0, 0, 0)) 
 
-        half_width = win_size[0] // 2
-        full_height = win_size[1]
-
-        # Vertical divider
-        pygame.draw.line(win, (100, 100, 100), (half_width, 0), (half_width, full_height), 2)
-
-        if not self.frame_surface:
-            return
-
-        cam_rect = self.frame_surface.get_rect()
-        max_width = win_size[0] // 2
-        max_height = win_size[1]
-
-        scale = min(max_width / cam_rect.width, max_height / cam_rect.height)
-        new_size = (int(cam_rect.width * scale), int(cam_rect.height * scale))
-        frame = pygame.transform.smoothscale(self.frame_surface, new_size)
-
-        pos_x = win_size[0] - new_size[0] // 2 - max_width // 2
-        pos_y = (win_size[1] - new_size[1]) // 2
-        win.blit(frame, (pos_x, pos_y))
+        if self.frame_surface:
+            scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
+            win.blit(scaled_frame, self.frame_draw_pos)
 
         pygame.display.update()
 
@@ -79,9 +87,10 @@ def game_loop():
 
                 pygame.display.set_mode(new_size, pygame.RESIZABLE)
                 game.init_scale(new_size)
+                game.init_opencv(new_size)
 
         game.update_frame()
-        game.draw(win)
+        game.draw()
 
     game.release()
     pygame.quit()
