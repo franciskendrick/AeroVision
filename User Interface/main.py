@@ -8,11 +8,13 @@ import os
 class Menu: 
     def __init__(self, win_size):
         self.popup_active = False
+        self.game_loading = False
         self.game_initialized = False
 
         self.init_scale(win_size)
         self.init_menu(win_size)
         self.init_popup(win_size)
+        self.init_loading(win_size)
 
     def init_scale(self, win_size):
         base_width, base_height = 640, 360
@@ -150,6 +152,38 @@ class Menu:
 
         self.popup = [popup_titlebar_rect, popup_rect, popup_closebutton_text, popup_closebutton_rect, popup_closebutton_text_pos]
 
+    def init_loading(self, win_size):
+        titlebar_height = int(22 * self.scale)
+        font_size = int(64 * self.scale)
+
+        win_w, win_ht = win_size
+
+        # Use same dimensions as the existing popup
+        popup_total_height = self.popup_height + titlebar_height
+        vertical_center = (win_ht - popup_total_height) // 2 - (18 * self.scale)
+
+        loading_titlebar_rect = pygame.Rect(
+            (win_w - self.popup_width) // 2,
+            vertical_center,
+            self.popup_width,
+            titlebar_height
+        )
+
+        loading_rect = pygame.Rect(
+            (win_w - self.popup_width) // 2,
+            vertical_center + titlebar_height,
+            self.popup_width,
+            self.popup_height
+        )
+
+        font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size, bold=False)
+        loading_surface = font.render("LOADING...", True, (0, 0, 0))
+
+        loading_x = loading_rect.x + (loading_rect.width - loading_surface.get_width()) // 2
+        loading_y = loading_rect.y + (loading_rect.height - loading_surface.get_height()) // 2
+
+        self.loading = [loading_titlebar_rect, loading_rect, loading_surface, (loading_x, loading_y)]
+
     def draw(self, win):
         win.blit(self.background, (0, 0))
         
@@ -162,10 +196,15 @@ class Menu:
             pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
             win.blit(text, text_pos)
 
-        if not self.popup_active:
+        if not self.popup_active and not self.game_loading:
             for text_surface, pos in self.texts:
                 win.blit(text_surface, pos)
-        else:
+        elif self.game_loading:
+            loading_titlebar_rect, loading_rect, loading_surface, loading_pos = self.loading
+            pygame.draw.rect(win, (255, 255, 255), loading_rect)
+            pygame.draw.rect(win, (192, 192, 192), loading_titlebar_rect)
+            win.blit(loading_surface, loading_pos)
+        elif self.popup_active:
             popup_titlebar_rect, popup_rect, popup_closebutton_text, popup_closebutton_rect, popup_closebutton_text_pos = self.popup
             pygame.draw.rect(win, (255, 255, 255), popup_rect)
             pygame.draw.rect(win, (192, 192, 192), popup_titlebar_rect)
@@ -360,6 +399,12 @@ def menu_loop():
                 menu.init_scale(new_size)
                 menu.init_menu(new_size)
                 menu.init_popup(new_size)
+                menu.init_loading(new_size)
+
+                if menu.game_initialized:
+                    game.init_scale(new_size)
+                    game.init_opencv(new_size)
+                    game.init_panels(new_size)
 
                 # Restore state
                 menu.popup_active = was_popup_active
@@ -373,18 +418,22 @@ def menu_loop():
                 btn_label = menu.menubutton_down_detection(mouse_pos)
                 if btn_label == "CONNECT TO PROTOTYPE":
                     if not menu.game_initialized:
-                        game = Game(win_size)
-                        menu.game_initialized = True
-
+                        menu.game_loading = True
                     menu.popup_active = True
-                    menu.buttons["START"][1] = True
                 elif btn_label == "START":
                     game_loop()
 
         mouse_pos = pygame.mouse.get_pos()
         menu.menubutton_over_detection(mouse_pos)
         menu.draw(win)
-    
+
+        if menu.game_loading and not menu.game_initialized:
+            current_winsize = pygame.display.get_surface().get_size()
+            game = Game(current_winsize)
+            menu.game_initialized = True
+            menu.game_loading = False
+            menu.buttons["START"][1] = True
+
     pygame.quit()
     sys.exit()
 
