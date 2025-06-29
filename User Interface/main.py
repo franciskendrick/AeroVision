@@ -1,3 +1,4 @@
+import numpy as np
 import pygame
 import cv2
 import sys
@@ -6,10 +7,8 @@ import os
 
 class Menu: 
     def __init__(self, win_size):
-        background = pygame.image.load(f"{resources_path}/background.png")
-        self.background = pygame.transform.scale(background, win_size)
-
         self.popup_active = False
+        self.game_initialized = False
 
         self.init_scale(win_size)
         self.init_menu(win_size)
@@ -22,6 +21,9 @@ class Menu:
         self.scale = min(scale_w, scale_h)
 
     def init_menu(self, win_size):
+        background = pygame.image.load(f"{resources_path}/background.png")
+        self.background = pygame.transform.scale(background, win_size)
+    
         garamond_size = int(54 * self.scale)
         franklinbig_size = int(112 * self.scale)
         franklinsmall_size = int(20 * self.scale)
@@ -177,6 +179,8 @@ class Menu:
                 if idx < len(self.popup_surfaces) - 1:
                     cursor_y += surf.get_height() + int(10 * self.scale)
 
+        pygame.display.update()
+
     def menubutton_down_detection(self, mouse_pos):
         for label, (_, is_open, *_, btn_rect) in self.buttons.items():
             if is_open and btn_rect.collidepoint(mouse_pos):
@@ -191,13 +195,149 @@ class Menu:
             button[0] = button[4].collidepoint(mouse_pos)
 
 
-def redraw_menu():
-    menu.draw(win)
+class Game:
+    def __init__(self, win_size):
+        import mediapipe as mp
 
-    pygame.display.update()
+        self.cap = cv2.VideoCapture(0)
+        self.mp_pose = mp.solutions.pose
+        self.pose = self.mp_pose.Pose()
+        self.mp_drawing = mp.solutions.drawing_utils
+        if not self.cap.isOpened():
+            print("Could not open camera.")
+            pygame.quit()
+            sys.exit()
+
+        self.frame_surface = None
+
+        self.init_scale(win_size)
+        self.init_opencv(win_size)
+        self.init_panels(win_size)
+
+    def init_scale(self, win_size):
+        base_width, base_height = 640, 360
+        scale_w = win_size[0] / base_width
+        scale_h = win_size[1] / base_height
+        self.scale = min(scale_w, scale_h)
+
+    def init_opencv(self, win_size):
+        # Use a dummy frame to calculate aspect ratio
+        ret, frame = self.cap.read()
+        if not ret:
+            print("Failed to read dummy frame for init.")
+            pygame.quit()
+            sys.exit()
+
+        frame = cv2.flip(frame, 1)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = np.rot90(frame)
+        dummy_surface = pygame.surfarray.make_surface(frame)
+
+        cam_rect = dummy_surface.get_rect()
+        max_width = win_size[0] // 2
+        max_height = win_size[1]
+
+        scale = min(max_width / cam_rect.width, max_height / cam_rect.height)
+        new_size = (int(cam_rect.width * scale), int(cam_rect.height * scale))
+        self.frame_draw_size = new_size
+
+        pos_x = win_size[0] - new_size[0] // 2 - max_width // 2
+        pos_y = (win_size[1] - new_size[1]) // 2
+        self.frame_draw_pos = (pos_x, pos_y)
+
+    def init_panels(self, win_size):
+        cam_top_y = self.frame_draw_pos[1]
+        cam_bottom_y = cam_top_y + self.frame_draw_size[1]
+        center_x = win_size[0] // 2
+        panel_width = win_size[0] // 2
+        full_height = win_size[1]
+
+        # RIGHT PANEL (camera side)
+        self.rp_top_rect = pygame.Rect(center_x, 0, panel_width, cam_top_y)
+        self.rp_bottom_rect = pygame.Rect(center_x, cam_bottom_y, panel_width, full_height - cam_bottom_y)
+
+        # LEFT PANEL (placeholder / visual instructions)
+        self.lp_top_rect = pygame.Rect(0, 0, center_x, cam_top_y)
+
+        # ── SIGNAL PREDICTION (right panel) ──
+        small_font_size = int(self.rp_top_rect.height * 0.3)
+        big_font_size = int(self.rp_top_rect.height * 0.525)
+
+        font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_font_size)
+        font_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_font_size)
+
+        label_surface = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0))
+        value_surface = font_big.render("NONE", True, (0, 0, 0))
+
+        label_rect = label_surface.get_rect()
+        value_rect = value_surface.get_rect()
+
+        total_text_height = label_rect.height + value_rect.height + int(4 * self.scale)
+
+        text_x = self.rp_top_rect.centerx
+        text_y_start = self.rp_top_rect.centery - total_text_height // 2
+
+        self.prediction_text_surfaces = [
+            (label_surface, (text_x - label_rect.width // 2, text_y_start)),
+            (value_surface, (text_x - value_rect.width // 2, text_y_start + label_rect.height + int(2 * self.scale)))
+        ]
+
+        # ── VISUAL INSTRUCTIONS (left panel) ──
+        vis_font_size = int(self.lp_top_rect.height * 0.55)
+        vis_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", vis_font_size, bold=False)
+
+        self.visinstr_text = vis_font.render("VISUAL INSTRUCTIONS", True, (0, 0, 0))
+        vis_rect = self.visinstr_text.get_rect()
+        self.visinstr_pos = (
+            self.lp_top_rect.centerx - vis_rect.width // 2,
+            self.lp_top_rect.centery - vis_rect.height // 2
+        )
+
+    def update_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        frame = cv2.flip(frame, 1)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # MediaPipe Pose processing
+        results = self.pose.process(frame_rgb)
+        if results.pose_landmarks:
+            self.mp_drawing.draw_landmarks(
+                frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS,
+                landmark_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2),
+                connection_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2)
+            )
+
+        # Convert for Pygame (after drawing)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_rgb = np.rot90(frame_rgb)
+        self.frame_surface = pygame.surfarray.make_surface(frame_rgb)
+
+    def draw(self, win):
+        win.fill((0, 0, 0)) 
+
+        if self.frame_surface:
+            scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
+            win.blit(scaled_frame, self.frame_draw_pos)
+
+            pygame.draw.rect(win, (192, 192, 192), self.rp_top_rect)
+            pygame.draw.rect(win, (192, 192, 192), self.rp_bottom_rect)
+            pygame.draw.rect(win, (119, 163, 200), self.lp_top_rect)
+
+            for surface, pos in self.prediction_text_surfaces:
+                win.blit(surface, pos)
+            win.blit(self.visinstr_text, self.visinstr_pos)
+
+        pygame.display.update()
+
+    def release(self):
+        self.cap.release()
 
 
 def menu_loop():
+    global game
     run = True
     while run:
         for event in pygame.event.get():
@@ -226,22 +366,51 @@ def menu_loop():
                 menu.buttons["START"][1] = start_button_state
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                btn_label = menu.menubutton_down_detection(mouse_pos)
-                if btn_label == "CONNECT TO PROTOTYPE":
-                    menu.popup_active = True
-                    menu.buttons["START"][1] = True
-                else:  # START
-                    pass
-
                 if menu.popup_active:
                     if menu.popupbutton_down_detection(mouse_pos):
                         menu.popup_active = False
 
+                btn_label = menu.menubutton_down_detection(mouse_pos)
+                if btn_label == "CONNECT TO PROTOTYPE":
+                    if not menu.game_initialized:
+                        game = Game(win_size)
+                        menu.game_initialized = True
+
+                    menu.popup_active = True
+                    menu.buttons["START"][1] = True
+                elif btn_label == "START":
+                    game_loop()
+
         mouse_pos = pygame.mouse.get_pos()
         menu.menubutton_over_detection(mouse_pos)
-
-        redraw_menu()
+        menu.draw(win)
     
+    pygame.quit()
+    sys.exit()
+
+
+def game_loop():
+    run = True
+
+    while run:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+
+            elif event.type == pygame.VIDEORESIZE:
+                new_width = max(640, event.w)
+                new_height = max(360, event.h)
+                new_size = (new_width, new_height)
+
+                pygame.display.set_mode(new_size, pygame.RESIZABLE)
+                game.init_scale(new_size)
+                game.init_opencv(new_size)
+                game.init_panels(new_size)
+
+        game.update_frame()
+        game.draw(win)
+
+    game.release()
     pygame.quit()
     sys.exit()
 
