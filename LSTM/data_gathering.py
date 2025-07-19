@@ -1,106 +1,53 @@
+import os
 import cv2
 import numpy as np
-import os
 import mediapipe as mp
 
-# Setup folder/s for data collection
-DATA_PATH = os.path.join("MP_Data")
-actions = np.array(["turn_left"])
-no_sequences = 30  # 30 videos worth of data
-sequence_length = 30  # 30 frames in length
+# Setup MediaPipe Pose
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-mp_holistic = mp.solutions.holistic
-mp_drawing = mp.solutions.drawing_utils
+# Define path to videos
+VIDEO_DIR = 'D:\Programming Projects\Repositories\AeroVision\CNN 4\Videos'
+OUTPUT_DIR = 'MP_Data'
 
+# Create output directories based on labels
+for filename in os.listdir(VIDEO_DIR):
+    if filename.endswith(".mp4"):
+        label = filename.split('_')[0] + '-' + filename.split('_')[1].split('.')[0]
+        label_dir = os.path.join(OUTPUT_DIR, label)
+        os.makedirs(label_dir, exist_ok=True)
 
-def mediapipe_detection(image, model):
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    image.flags.writeable = False
-    results = model.process(image)
-    image.flags.writeable = True
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    return image, results
+# Start frame processing
+for filename in os.listdir(VIDEO_DIR):
+    if not filename.endswith(".mp4"):
+        continue
 
+    label = filename.split('_')[0] + '-' + filename.split('_')[1].split('.')[0]
+    label_dir = os.path.join(OUTPUT_DIR, label)
 
-def draw_landmarks(image, results):
-    mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
-    # mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
-    # mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
+    filepath = os.path.join(VIDEO_DIR, filename)
+    cap = cv2.VideoCapture(filepath)
 
+    frame_count = 0
 
-def extract_keypoints(results):
-    pose = np.array([[res.x, res.y, res.z, res.visibility] for res in results.pose_landmarks.landmark]).flatten() if results.pose_landmarks else np.zeros(132)
-    # lefthand = np.array([[res.x, res.y, res.z] for res in results.left_hand_landmarks.landmark]).flatten() if results.left_hand_landmarks else np.zeros(21*3)
-    # righthand = np.array([[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]).flatten() if results.right_hand_landmarks else np.zeros(21*3)
+    while cap.isOpened():
+        success, frame = cap.read()
+        if not success:
+            break
 
-    return np.concatenate([pose])
-    # return np.concatenate([pose, lefthand, righthand])
+        # Convert the BGR image to RGB before processing
+        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        result = pose.process(image_rgb)
 
+        if result.pose_landmarks:
+            # Flatten landmark data to a 99-dim vector (33 landmarks × (x, y, z))
+            landmarks = np.array([[lm.x, lm.y, lm.z] for lm in result.pose_landmarks.landmark]).flatten()
+            np.save(os.path.join(label_dir, f'{frame_count}.npy'), landmarks)
 
-def setup_datacollection_folder():
-    for action in actions:
-        try:
-            os.makedirs(os.path.join(DATA_PATH, action))
-        except:
-            pass
-        # for sequence in range(no_sequences):
-        #     try:
-        #         os.makedirs(os.path.join(DATA_PATH, action, str(sequence)))
-        #     except:
-        #         pass
+        frame_count += 1
 
+    cap.release()
 
-# Setup Folders for Data Collection
-setup_datacollection_folder()
-
-cap = cv2.VideoCapture(0)
-with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
-    for action in actions:  # loop through actions
-        for sequence in range(no_sequences):  # loop through videos
-            for frame_num in range(sequence_length):  # loop through video length
-                # Read feed
-                ret, frame = cap.read()
-
-                # Make detections
-                image, results = mediapipe_detection(frame, holistic)
-
-                # Draw landmarks
-                draw_landmarks(image, results)
-
-                # Apply collection logic
-                if frame_num == 0:
-                    cv2.putText(
-                        image, "STARTING COLLECTION", (120, 200),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 4, cv2.LINE_AA
-                    )
-                    cv2.putText(
-                        image, "Collecting frames for {} Video Number {}".format(action, sequence), (15, 12),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA
-                    )
-                    print("STARTING COLLECTION")
-                    # cv2.waitKey(1000)
-                else:
-                    cv2.putText(
-                        image, "Collecting frames for {} Video Number {}".format(action, sequence), (15, 12),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA
-                    )
-                    print("Collecting frames for {} Video Number {}".format(action, sequence))
-
-                # 
-                if sequence == no_sequences:
-                    cv2.waitKey(3000)
-
-                # Export keypoints
-                keypoints = extract_keypoints(results)
-                npy_path = os.path.join(DATA_PATH, action, str(sequence))
-                np.save(npy_path, keypoints)
-
-                # Show to screen
-                cv2.imshow("AeroVision", image)
-
-                # Break
-                if cv2.waitKey(10) & 0xFF == ord("q"):
-                    break
-
-cap.release()
-cv2.destroyAllWindows()
+pose.close()
+print("✅ Data gathering complete.")
