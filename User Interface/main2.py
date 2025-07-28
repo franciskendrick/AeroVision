@@ -91,7 +91,44 @@ class Game:
             (value_surface, (text_x - value_rect.width // 2, text_y_start + label_rect.height + int(2 * self.scale)))
         ]
 
+        # BUTTONS
+        franklinsmall_size = int(16 * self.scale)
+        franklingothic_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", franklinsmall_size, bold=False)
+
+        button_labels = ["END TRAINING", "START"]
+        button_surfaces = [franklingothic_small.render(label, True, (0, 0, 0)) for label in button_labels]
+
+        base_padding_w, base_padding_h = 25, 20
+        padding_w = int(base_padding_w * self.scale)
+        padding_h = int(base_padding_h * self.scale)
+
+        # Step 1: Find max text width
+        text_rects = [surf.get_rect() for surf in button_surfaces]
+        max_text_width = max(rect.width for rect in text_rects)
+
+        # Step 2: Shared button dimensions
+        button_width = max_text_width + padding_w
+        button_height = max(rect.height for rect in text_rects) + padding_h
+
+        # Vertical alignment (example)
+        y = int(317 * self.scale)
+
+        self.buttons = {}
+        for idx, (label, surface, text_rect) in enumerate(zip(button_labels, button_surfaces, text_rects)):
+            if idx == 0:  # Left
+                x = self.lp_top_rect.left + int(20 * self.scale)
+            else:  # Right
+                x = self.lp_top_rect.right - button_width - int(20 * self.scale)
+
+            button_rect = pygame.Rect(x, y, button_width, button_height)
+
+            text_x = x + (button_width - text_rect.width) // 2
+            text_y = y + (button_height - text_rect.height) // 2
+
+            self.buttons[label] = [False, True, surface, (text_x, text_y), button_rect]
+
         # ── VISUAL INSTRUCTIONS (left panel) ──
+     
         vis_font_size = int(self.lp_top_rect.height * 0.55)
         vis_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", vis_font_size, bold=False)
 
@@ -101,6 +138,8 @@ class Game:
             self.lp_top_rect.centerx - vis_rect.width // 2,
             self.lp_top_rect.centery - vis_rect.height // 2
         )
+
+
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -125,9 +164,18 @@ class Game:
         self.frame_surface = pygame.surfarray.make_surface(frame_rgb)
 
     def draw(self):
-        win.fill((0, 0, 0)) 
+        win.fill((255, 255, 255)) 
+
+        border_width = max(1, round(2 * self.scale))
 
         if self.frame_surface:
+            for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
+                fill = (192, 192, 192) if is_hovered and is_open else \
+                    (240, 240, 240) if is_open else (132, 132, 132)
+                pygame.draw.rect(win, fill, btn_rect)
+                pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
+                win.blit(text, text_pos)
+        
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
             win.blit(scaled_frame, self.frame_draw_pos)
 
@@ -140,6 +188,15 @@ class Game:
             win.blit(self.visinstr_text, self.visinstr_pos)
 
         pygame.display.update()
+
+    def button_over_detection(self, mouse_pos):
+        for button in self.buttons.values():
+            button[0] = button[4].collidepoint(mouse_pos)
+
+    def button_down_detection(self, mouse_pos):
+        for label, (_, is_open, *_, btn_rect) in self.buttons.items():
+            if is_open and btn_rect.collidepoint(mouse_pos):
+                return label
 
     def release(self):
         self.cap.release()
@@ -163,6 +220,12 @@ def game_loop():
                 game.init_opencv(new_size)
                 game.init_panels(new_size)
 
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                btn_label = game.button_down_detection(mouse_pos)
+                print(btn_label)
+
+        mouse_pos = pygame.mouse.get_pos()
+        game.button_over_detection(mouse_pos)
         game.update_frame()
         game.draw()
 
