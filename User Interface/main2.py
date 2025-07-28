@@ -115,10 +115,11 @@ class Game:
 
         self.buttons = {}
         for idx, (label, surface, text_rect) in enumerate(zip(button_labels, button_surfaces, text_rects)):
-            if idx == 0:  # Left
-                x = self.lp_top_rect.left + int(20 * self.scale)
-            else:  # Right
-                x = self.lp_top_rect.right - button_width - int(20 * self.scale)
+            if idx == 0:  # Bottom-left of RIGHT panel
+                x = self.rp_bottom_rect.left + int(20 * self.scale)
+            else:  # Bottom-right of RIGHT panel
+                x = self.rp_bottom_rect.right - button_width - int(20 * self.scale)
+
 
             button_rect = pygame.Rect(x, y, button_width, button_height)
 
@@ -138,8 +139,6 @@ class Game:
             self.lp_top_rect.centerx - vis_rect.width // 2,
             self.lp_top_rect.centery - vis_rect.height // 2
         )
-
-
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -168,14 +167,7 @@ class Game:
 
         border_width = max(1, round(2 * self.scale))
 
-        if self.frame_surface:
-            for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
-                fill = (192, 192, 192) if is_hovered and is_open else \
-                    (240, 240, 240) if is_open else (132, 132, 132)
-                pygame.draw.rect(win, fill, btn_rect)
-                pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
-                win.blit(text, text_pos)
-        
+        if self.frame_surface:     
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
             win.blit(scaled_frame, self.frame_draw_pos)
 
@@ -186,6 +178,13 @@ class Game:
             for surface, pos in self.prediction_text_surfaces:
                 win.blit(surface, pos)
             win.blit(self.visinstr_text, self.visinstr_pos)
+
+            for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
+                fill = (192, 192, 192) if is_hovered and is_open else \
+                    (240, 240, 240) if is_open else (132, 132, 132)
+                pygame.draw.rect(win, fill, btn_rect)
+                pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
+                win.blit(text, text_pos)
 
         pygame.display.update()
 
