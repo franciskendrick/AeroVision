@@ -140,28 +140,54 @@ class Game:
         )
 
         # Guide
-        self.guide_position = [0, self.lp_top_rect.bottom]
+        self.guide_position = [0, 0]
         self.guide_videos = {}
-        actions = [
+        self.actions = [
             "straight_ahead", "turn_left", "turn_right", "stop", "cut_engine",
             "start_engine", "set_brakes", "chocks_insterted", "all_clear"]
+        self.current_action = 8
+        offsets = [
+            (54, 10),
+            (54, 10),
+            (74, 10),
+            (66, 12),
+            (122, 55),
+            (56, 0),
+            (62, 0), 
+            (53, 0),
+            (54, 0)
+        ]
+        video_sizes = [
+            450,
+            450,
+            450,
+            450,
+            570,
+            430, 
+            450, 
+            430,
+            430
+        ]
 
-        for action in actions:
+        for action, offset, size in zip(self.actions, offsets, video_sizes):
             action_dir = os.path.join(f"{resources_path}/guide/{action}")
-            
-            # frames = [pygame.image.load(f"{action_dir}/{file}").convert() for file in os.listdir(action_dir)]
             frame_paths = sorted(
                 [os.path.join(action_dir, f) for f in os.listdir(action_dir) if f.endswith(".jpg")])
             frames = []
             for path in frame_paths:
                 img = pygame.image.load(path).convert()
-                original_size = img.get_size()
-                original_size = (300, 300)
+                if action == "turn_right":
+                    img = pygame.transform.flip(img, True, False)  # Flip horizontally only
+                original_size = (size, size)
                 scaled_size = (int(original_size[0] * self.scale), int(original_size[1] * self.scale))
                 img_scaled = pygame.transform.smoothscale(img, scaled_size)
                 frames.append(img_scaled)
 
-            self.guide_videos[action] = (frames, tuple(self.guide_position))
+            x, y = self.guide_position
+            x_offset, y_offset = offset
+            x = (x - x_offset) * self.scale
+            y = (y - y_offset) * self.scale
+            self.guide_videos[action] = (frames, (x, y))
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -191,16 +217,14 @@ class Game:
         border_width = max(1, round(2 * self.scale))
 
         if self.frame_surface:     
+            # Draw guide
+            self.draw_guide_animation(win, self.actions[self.current_action])
+
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
             win.blit(scaled_frame, self.frame_draw_pos)
 
             pygame.draw.rect(win, (192, 192, 192), self.rp_top_rect)
             pygame.draw.rect(win, (119, 163, 200), self.lp_top_rect)
-
-            # Draw guide
-            self.draw_guide_animation(win, "")
-
-            pygame.draw.line(win, (0, 0, 0), (self.lp_top_rect.centerx, 0), (self.lp_top_rect.centerx, 360 * self.scale))
 
             # Draw text
             for surface, pos in self.prediction_text_surfaces:
@@ -218,7 +242,6 @@ class Game:
         pygame.display.update()
 
     def draw_guide_animation(self, screen, action, frame_delay=5):
-        action = "straight_ahead"
         if not hasattr(self, 'guide_frame_counters'):
             self.guide_frame_counters = {}
             self.guide_frame_timers = {}
@@ -256,7 +279,6 @@ class Game:
 
 def game_loop():
     run = True
-
     while run:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -274,7 +296,12 @@ def game_loop():
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 btn_label = game.button_down_detection(mouse_pos)
-                print(btn_label)
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_w:
+                    game.current_action += 1
+                    if game.current_action >= len(game.actions):
+                        game.current_action = 0
 
         mouse_pos = pygame.mouse.get_pos()
         game.button_over_detection(mouse_pos)
