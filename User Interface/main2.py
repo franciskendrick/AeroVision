@@ -120,7 +120,6 @@ class Game:
             else:  # Bottom-right of RIGHT panel
                 x = self.rp_bottom_rect.right - button_width - int(20 * self.scale)
 
-
             button_rect = pygame.Rect(x, y, button_width, button_height)
 
             text_x = x + (button_width - text_rect.width) // 2
@@ -139,6 +138,30 @@ class Game:
             self.lp_top_rect.centerx - vis_rect.width // 2,
             self.lp_top_rect.centery - vis_rect.height // 2
         )
+
+        # Guide
+        self.guide_position = [0, self.lp_top_rect.bottom]
+        self.guide_videos = {}
+        actions = [
+            "straight_ahead", "turn_left", "turn_right", "stop", "cut_engine",
+            "start_engine", "set_brakes", "chocks_insterted", "all_clear"]
+
+        for action in actions:
+            action_dir = os.path.join(f"{resources_path}/guide/{action}")
+            
+            # frames = [pygame.image.load(f"{action_dir}/{file}").convert() for file in os.listdir(action_dir)]
+            frame_paths = sorted(
+                [os.path.join(action_dir, f) for f in os.listdir(action_dir) if f.endswith(".jpg")])
+            frames = []
+            for path in frame_paths:
+                img = pygame.image.load(path).convert()
+                original_size = img.get_size()
+                original_size = (300, 300)
+                scaled_size = (int(original_size[0] * self.scale), int(original_size[1] * self.scale))
+                img_scaled = pygame.transform.smoothscale(img, scaled_size)
+                frames.append(img_scaled)
+
+            self.guide_videos[action] = (frames, tuple(self.guide_position))
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -172,13 +195,19 @@ class Game:
             win.blit(scaled_frame, self.frame_draw_pos)
 
             pygame.draw.rect(win, (192, 192, 192), self.rp_top_rect)
-            pygame.draw.rect(win, (192, 192, 192), self.rp_bottom_rect)
             pygame.draw.rect(win, (119, 163, 200), self.lp_top_rect)
 
+            # Draw guide
+            self.draw_guide_animation(win, "")
+
+            pygame.draw.line(win, (0, 0, 0), (self.lp_top_rect.centerx, 0), (self.lp_top_rect.centerx, 360 * self.scale))
+
+            # Draw text
             for surface, pos in self.prediction_text_surfaces:
                 win.blit(surface, pos)
             win.blit(self.visinstr_text, self.visinstr_pos)
 
+            # Draw buttons
             for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
                 fill = (192, 192, 192) if is_hovered and is_open else \
                     (240, 240, 240) if is_open else (132, 132, 132)
@@ -187,6 +216,30 @@ class Game:
                 win.blit(text, text_pos)
 
         pygame.display.update()
+
+    def draw_guide_animation(self, screen, action, frame_delay=5):
+        action = "straight_ahead"
+        if not hasattr(self, 'guide_frame_counters'):
+            self.guide_frame_counters = {}
+            self.guide_frame_timers = {}
+
+        frames, pos = self.guide_videos[action]
+
+        # Init counters
+        if action not in self.guide_frame_counters:
+            self.guide_frame_counters[action] = 0
+            self.guide_frame_timers[action] = 0
+
+        idx = self.guide_frame_counters[action]
+
+        # Draw current frame
+        screen.blit(frames[idx], pos)
+
+        # Update timer and frame index
+        self.guide_frame_timers[action] += 1
+        if self.guide_frame_timers[action] >= frame_delay:
+            self.guide_frame_counters[action] = (idx + 1) % len(frames)
+            self.guide_frame_timers[action] = 0
 
     def button_over_detection(self, mouse_pos):
         for button in self.buttons.values():
