@@ -168,6 +168,17 @@ class Game:
             430,
             430
         ]
+        self.frame_delays = [
+            5,
+            5,
+            5,
+            10,
+            5,
+            5,
+            10,
+            5,
+            10
+        ]
 
         for action, offset, size in zip(self.actions, offsets, video_sizes):
             action_dir = os.path.join(f"{resources_path}/guide/{action}")
@@ -218,7 +229,7 @@ class Game:
 
         if self.frame_surface:     
             # Draw guide
-            self.draw_guide_animation(win, self.actions[self.current_action])
+            self.draw_guide_animation(win, self.actions[self.current_action], self.frame_delays[self.current_action])
 
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
             win.blit(scaled_frame, self.frame_draw_pos)
@@ -241,7 +252,7 @@ class Game:
 
         pygame.display.update()
 
-    def draw_guide_animation(self, screen, action, frame_delay=5):
+    def draw_guide_animation(self, screen, action, frame_delay):
         if not hasattr(self, 'guide_frame_counters'):
             self.guide_frame_counters = {}
             self.guide_frame_timers = {}
