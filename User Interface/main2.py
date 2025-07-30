@@ -147,18 +147,64 @@ class Game:
             self.guide_position = [0, 0]
             self.guide_videos = {}
             self.current_action = 0
-            self.actions = [
-                "straight_ahead", "turn_left", "turn_right", "stop", "cut_engine",
-                "start_engine", "set_brakes", "chocks_inserted", "all_clear"
-            ]
-            offsets = [
-                (54, 10), (74, 10), (54, 10), (66, 12), (122, 55),
-                (56, 0), (62, 0), (53, 0), (54, 0)
-            ]
-            sizes = [450, 450, 450, 450, 570, 430, 450, 430, 430]
-            self.frame_delays = [5, 5, 5, 10, 5, 5, 10, 5, 10]
+            self.action_configs = {
+                "straight_ahead": {
+                    "offset": (54, 10),
+                    "size": 450,
+                    "frame_delay": 5,
+                },
+                "turn_left": {
+                    "offset": (74, 10),
+                    "size": 450,
+                    "frame_delay": 5,
+                },
+                "turn_right": {
+                    "offset": (54, 10),
+                    "size": 450,
+                    "frame_delay": 5,
+                },
+                "stop": {
+                    "offset": (66, 12),
+                    "size": 450,
+                    "frame_delay": 10,
+                },
+                "cut_engine": {
+                    "offset": (122, 55),
+                    "size": 570,
+                    "frame_delay": 7,
+                },
+                "start_engine": {
+                    "offset": (56, 0),
+                    "size": 430,
+                    "frame_delay": 5,
+                },
+                "set_brakes": {
+                    "offset": (62, 0),
+                    "size": 450,
+                    "frame_delay": 10,
+                },
+                "chocks_inserted": {
+                    "offset": (53, 0),
+                    "size": 430,
+                    "frame_delay": 7,
+                },
+                "all_clear": {
+                    "offset": (54, 0),
+                    "size": 430,
+                    "frame_delay": 10,
+                },
+            }
 
-            for action, offset, size in zip(self.actions, offsets, sizes):
+            self.actions = [
+                "start_engine", "straight_ahead", "turn_left", "turn_right",
+                "stop", "set_brakes", "cut_engine", "chocks_inserted", "all_clear"
+            ]
+            self.frame_delays = [self.action_configs[action]["frame_delay"] for action in self.actions]
+
+            for action, cfg in self.action_configs.items():
+                offset = cfg["offset"]
+                size = cfg["size"]
+
                 dir_path = os.path.join(resources_path, "guide_videos", action)
                 frame_paths = sorted([os.path.join(dir_path, f) for f in os.listdir(dir_path) if f.endswith(".jpg")])
                 frames = []
@@ -172,7 +218,10 @@ class Game:
 
                 x, y = self.guide_position
                 x_offset, y_offset = offset
-                self.guide_videos[action] = (frames, ((x - x_offset) * self.scale, (y - y_offset) * self.scale))
+                self.guide_videos[action] = (
+                    frames,
+                    ((x - x_offset) * self.scale, (y - y_offset) * self.scale)
+                )
 
         def load_guide_audio():
             self.guide_audio = {}
