@@ -55,165 +55,122 @@ class Game:
         self.frame_draw_pos = (pos_x, pos_y)
 
     def init_panels(self, win_size):
-        cam_top_y = self.frame_draw_pos[1]
-        cam_bottom_y = cam_top_y + self.frame_draw_size[1]
-        center_x = win_size[0] // 2
-        panel_width = win_size[0] // 2
-        full_height = win_size[1]
+        def setup_layout():
+            cam_top_y = self.frame_draw_pos[1]
+            cam_bottom_y = cam_top_y + self.frame_draw_size[1]
+            center_x = win_size[0] // 2
+            panel_width = win_size[0] // 2
+            full_height = win_size[1]
 
-        # RIGHT PANEL (camera side)
-        self.rp_top_rect = pygame.Rect(center_x, 0, panel_width, cam_top_y)
-        self.rp_bottom_rect = pygame.Rect(center_x, cam_bottom_y, panel_width, full_height - cam_bottom_y)
+            self.rp_top_rect = pygame.Rect(center_x, 0, panel_width, cam_top_y)
+            self.rp_bottom_rect = pygame.Rect(center_x, cam_bottom_y, panel_width, full_height - cam_bottom_y)
+            self.lp_top_rect = pygame.Rect(0, 0, center_x, cam_top_y)
 
-        # LEFT PANEL (placeholder / visual instructions)
-        self.lp_top_rect = pygame.Rect(0, 0, center_x, cam_top_y)
+        def setup_prediction_text():
+            small_size = int(self.rp_top_rect.height * 0.3)
+            big_size = int(self.rp_top_rect.height * 0.525)
+            font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
+            font_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_size)
 
-        # ── SIGNAL PREDICTION (right panel) ──
-        small_font_size = int(self.rp_top_rect.height * 0.3)
-        big_font_size = int(self.rp_top_rect.height * 0.525)
+            label_surface = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0))
+            value_surface = font_big.render("NONE", True, (0, 0, 0))
 
-        font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_font_size)
-        font_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_font_size)
+            label_rect = label_surface.get_rect()
+            value_rect = value_surface.get_rect()
+            spacing = int(2 * self.scale)
+            total_height = label_rect.height + value_rect.height + 2 * spacing
 
-        label_surface = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0))
-        value_surface = font_big.render("NONE", True, (0, 0, 0))
+            x = self.rp_top_rect.centerx
+            y_start = self.rp_top_rect.centery - total_height // 2
 
-        label_rect = label_surface.get_rect()
-        value_rect = value_surface.get_rect()
+            self.prediction_text_surfaces = [
+                (label_surface, (x - label_rect.width // 2, y_start)),
+                (value_surface, (x - value_rect.width // 2, y_start + label_rect.height + spacing))
+            ]
 
-        total_text_height = label_rect.height + value_rect.height + int(4 * self.scale)
+        def setup_buttons():
+            font_size = int(16 * self.scale)
+            font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
+            labels = ["END TRAINING", "START"]
+            surfaces = [font.render(text, True, (0, 0, 0)) for text in labels]
 
-        text_x = self.rp_top_rect.centerx
-        text_y_start = self.rp_top_rect.centery - total_text_height // 2
+            padding_w = int(25 * self.scale)
+            padding_h = int(20 * self.scale)
+            rects = [s.get_rect() for s in surfaces]
+            width = max(r.width for r in rects) + padding_w
+            height = max(r.height for r in rects) + padding_h
+            y = int(317 * self.scale)
 
-        self.prediction_text_surfaces = [
-            (label_surface, (text_x - label_rect.width // 2, text_y_start)),
-            (value_surface, (text_x - value_rect.width // 2, text_y_start + label_rect.height + int(2 * self.scale)))
-        ]
+            self.buttons = {}
+            for i, (label, surface, rect) in enumerate(zip(labels, surfaces, rects)):
+                x = self.rp_bottom_rect.left + int(20 * self.scale) if i == 0 else self.rp_bottom_rect.right - width - int(20 * self.scale)
+                btn_rect = pygame.Rect(x, y, width, height)
+                text_pos = (x + (width - rect.width) // 2, y + (height - rect.height) // 2)
+                self.buttons[label] = [False, True, surface, text_pos, btn_rect]
 
-        # BUTTONS
-        franklinsmall_size = int(16 * self.scale)
-        franklingothic_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", franklinsmall_size, bold=False)
+        def setup_visual_instruction_text():
+            font_size = int(self.lp_top_rect.height * 0.55)
+            font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
+            text = font.render("VISUAL INSTRUCTIONS", True, (0, 0, 0))
+            rect = text.get_rect()
+            self.visinstr_text = text
+            self.visinstr_pos = (
+                self.lp_top_rect.centerx - rect.width // 2,
+                self.lp_top_rect.centery - rect.height // 2
+            )
 
-        button_labels = ["END TRAINING", "START"]
-        button_surfaces = [franklingothic_small.render(label, True, (0, 0, 0)) for label in button_labels]
+        def load_guide_videos():
+            self.guide_position = [0, 0]
+            self.guide_videos = {}
+            self.current_action = 0
+            self.actions = [
+                "straight_ahead", "turn_left", "turn_right", "stop", "cut_engine",
+                "start_engine", "set_brakes", "chocks_inserted", "all_clear"
+            ]
+            offsets = [
+                (54, 10), (54, 10), (74, 10), (66, 12), (122, 55),
+                (56, 0), (62, 0), (53, 0), (54, 0)
+            ]
+            sizes = [450, 450, 450, 450, 570, 430, 450, 430, 430]
+            self.frame_delays = [5, 5, 5, 10, 5, 5, 10, 5, 10]
 
-        base_padding_w, base_padding_h = 25, 20
-        padding_w = int(base_padding_w * self.scale)
-        padding_h = int(base_padding_h * self.scale)
+            for action, offset, size in zip(self.actions, offsets, sizes):
+                dir_path = os.path.join(resources_path, "guide_videos", action)
+                frame_paths = sorted([os.path.join(dir_path, f) for f in os.listdir(dir_path) if f.endswith(".jpg")])
+                frames = []
 
-        # Step 1: Find max text width
-        text_rects = [surf.get_rect() for surf in button_surfaces]
-        max_text_width = max(rect.width for rect in text_rects)
+                for path in frame_paths:
+                    img = pygame.image.load(path).convert()
+                    if action == "turn_right":
+                        img = pygame.transform.flip(img, True, False)
+                    scaled = pygame.transform.smoothscale(img, (int(size * self.scale), int(size * self.scale)))
+                    frames.append(scaled)
 
-        # Step 2: Shared button dimensions
-        button_width = max_text_width + padding_w
-        button_height = max(rect.height for rect in text_rects) + padding_h
+                x, y = self.guide_position
+                x_offset, y_offset = offset
+                self.guide_videos[action] = (frames, ((x - x_offset) * self.scale, (y - y_offset) * self.scale))
 
-        # Vertical alignment (example)
-        y = int(317 * self.scale)
+        def load_guide_audio():
+            self.guide_audio = {}
+            audio_dir = os.path.join(resources_path, "guide_audio")
 
-        self.buttons = {}
-        for idx, (label, surface, text_rect) in enumerate(zip(button_labels, button_surfaces, text_rects)):
-            if idx == 0:  # Bottom-left of RIGHT panel
-                x = self.rp_bottom_rect.left + int(20 * self.scale)
-            else:  # Bottom-right of RIGHT panel
-                x = self.rp_bottom_rect.right - button_width - int(20 * self.scale)
+            for action in self.actions:
+                path = os.path.join(audio_dir, f"{action}.mp3")
+                if os.path.exists(path):
+                    try:
+                        self.guide_audio[action] = pygame.mixer.Sound(path)
+                    except pygame.error as e:
+                        print(f"Failed to load audio for '{action}': {e}")
+                else:
+                    print(f"Missing audio for action: {action}")
 
-            button_rect = pygame.Rect(x, y, button_width, button_height)
-
-            text_x = x + (button_width - text_rect.width) // 2
-            text_y = y + (button_height - text_rect.height) // 2
-
-            self.buttons[label] = [False, True, surface, (text_x, text_y), button_rect]
-
-        # ── VISUAL INSTRUCTIONS (left panel) ──
-     
-        vis_font_size = int(self.lp_top_rect.height * 0.55)
-        vis_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", vis_font_size, bold=False)
-
-        self.visinstr_text = vis_font.render("VISUAL INSTRUCTIONS", True, (0, 0, 0))
-        vis_rect = self.visinstr_text.get_rect()
-        self.visinstr_pos = (
-            self.lp_top_rect.centerx - vis_rect.width // 2,
-            self.lp_top_rect.centery - vis_rect.height // 2
-        )
-
-        # Guide Videos 
-        self.guide_position = [0, 0]
-        self.guide_videos = {}
-        self.actions = [
-            "straight_ahead", "turn_left", "turn_right", "stop", "cut_engine",
-            "start_engine", "set_brakes", "chocks_inserted", "all_clear"]
-        self.current_action = 0
-        offsets = [
-            (54, 10),
-            (54, 10),
-            (74, 10),
-            (66, 12),
-            (122, 55),
-            (56, 0),
-            (62, 0), 
-            (53, 0),
-            (54, 0)
-        ]
-        video_sizes = [
-            450,
-            450,
-            450,
-            450,
-            570,
-            430, 
-            450, 
-            430,
-            430
-        ]
-        self.frame_delays = [
-            5,
-            5,
-            5,
-            10,
-            5,
-            5,
-            10,
-            5,
-            10
-        ]
-
-        for action, offset, size in zip(self.actions, offsets, video_sizes):
-            action_dir = os.path.join(f"{resources_path}/guide_videos/{action}")
-            frame_paths = sorted(
-                [os.path.join(action_dir, f) for f in os.listdir(action_dir) if f.endswith(".jpg")])
-            frames = []
-            for path in frame_paths:
-                img = pygame.image.load(path).convert()
-                if action == "turn_right":
-                    img = pygame.transform.flip(img, True, False)  # Flip horizontally only
-                original_size = (size, size)
-                scaled_size = (int(original_size[0] * self.scale), int(original_size[1] * self.scale))
-                img_scaled = pygame.transform.smoothscale(img, scaled_size)
-                frames.append(img_scaled)
-
-            x, y = self.guide_position
-            x_offset, y_offset = offset
-            x = (x - x_offset) * self.scale
-            y = (y - y_offset) * self.scale
-            self.guide_videos[action] = (frames, (x, y))
-
-        # Guide Audio
-        self.guide_audio = {}
-        audio_dir = os.path.join(resources_path, "guide_audio")
-
-        for action in self.actions:
-            audio_path = os.path.join(audio_dir, f"{action}.mp3")
-            if os.path.exists(audio_path):
-                try:
-                    self.guide_audio[action] = pygame.mixer.Sound(audio_path)
-                except pygame.error as e:
-                    print(f"Failed to load audio for '{action}': {e}")
-            else:
-                print(f"Audio file missing for action: {action}")
-
+        # Execute setup routines
+        setup_layout()
+        setup_prediction_text()
+        setup_buttons()
+        setup_visual_instruction_text()
+        load_guide_videos()
+        load_guide_audio()
 
     def update_frame(self):
         ret, frame = self.cap.read()
