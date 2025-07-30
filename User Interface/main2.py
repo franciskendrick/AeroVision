@@ -18,6 +18,7 @@ class Game:
             sys.exit()
 
         self.frame_surface = None
+        self.training_started = False
 
         self.init_scale(win_size)
         self.init_opencv(win_size)
@@ -37,7 +38,6 @@ class Game:
             pygame.quit()
             sys.exit()
 
-        frame = cv2.flip(frame, 1)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame = np.rot90(frame)
         dummy_surface = pygame.surfarray.make_surface(frame)
@@ -120,12 +120,17 @@ class Game:
             height = max(r.height for r in rects) + padding_h
             y = int(317 * self.scale)
 
+            initial_state = {
+                "END TRAINING": False,
+                "START": True
+            }
+
             self.buttons = {}
             for i, (label, surface, rect) in enumerate(zip(labels, surfaces, rects)):
                 x = self.rp_bottom_rect.left + int(20 * self.scale) if i == 0 else self.rp_bottom_rect.right - width - int(20 * self.scale)
                 btn_rect = pygame.Rect(x, y, width, height)
                 text_pos = (x + (width - rect.width) // 2, y + (height - rect.height) // 2)
-                self.buttons[label] = [False, True, surface, text_pos, btn_rect]
+                self.buttons[label] = [False, initial_state[label], surface, text_pos, btn_rect]
 
         def setup_visual_instruction_text():
             font_size = int(self.lp_top_rect.height * 0.55)
@@ -196,7 +201,6 @@ class Game:
         if not ret:
             return
 
-        frame = cv2.flip(frame, 1)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
         # MediaPipe Pose processing
@@ -220,7 +224,8 @@ class Game:
 
         if self.frame_surface:     
             # Draw guide
-            self.draw_guide_animation(win, self.actions[self.current_action], self.frame_delays[self.current_action])
+            if self.training_started:
+                self.draw_guide_animation(win, self.actions[self.current_action], self.frame_delays[self.current_action])
 
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
             win.blit(scaled_frame, self.frame_draw_pos)
@@ -306,6 +311,17 @@ def game_loop():
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 btn_label = game.button_down_detection(mouse_pos)
+                if btn_label == "START":
+                    game.training_started = True
+                    game.play_guide_audio()
+                    game.buttons["START"][1] = False
+                    game.buttons["END TRAINING"][1] = True
+
+                elif btn_label == "END TRAINING":
+                    game.training_started = False
+                    pygame.mixer.stop()
+                    game.buttons["START"][1] = True
+                    game.buttons["END TRAINING"][1] = False
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_w:
