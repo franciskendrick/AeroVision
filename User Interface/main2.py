@@ -139,13 +139,13 @@ class Game:
             self.lp_top_rect.centery - vis_rect.height // 2
         )
 
-        # Guide
+        # Guide Videos 
         self.guide_position = [0, 0]
         self.guide_videos = {}
         self.actions = [
             "straight_ahead", "turn_left", "turn_right", "stop", "cut_engine",
-            "start_engine", "set_brakes", "chocks_insterted", "all_clear"]
-        self.current_action = 8
+            "start_engine", "set_brakes", "chocks_inserted", "all_clear"]
+        self.current_action = 0
         offsets = [
             (54, 10),
             (54, 10),
@@ -181,7 +181,7 @@ class Game:
         ]
 
         for action, offset, size in zip(self.actions, offsets, video_sizes):
-            action_dir = os.path.join(f"{resources_path}/guide/{action}")
+            action_dir = os.path.join(f"{resources_path}/guide_videos/{action}")
             frame_paths = sorted(
                 [os.path.join(action_dir, f) for f in os.listdir(action_dir) if f.endswith(".jpg")])
             frames = []
@@ -199,6 +199,21 @@ class Game:
             x = (x - x_offset) * self.scale
             y = (y - y_offset) * self.scale
             self.guide_videos[action] = (frames, (x, y))
+
+        # Guide Audio
+        self.guide_audio = {}
+        audio_dir = os.path.join(resources_path, "guide_audio")
+
+        for action in self.actions:
+            audio_path = os.path.join(audio_dir, f"{action}.mp3")
+            if os.path.exists(audio_path):
+                try:
+                    self.guide_audio[action] = pygame.mixer.Sound(audio_path)
+                except pygame.error as e:
+                    print(f"Failed to load audio for '{action}': {e}")
+            else:
+                print(f"Audio file missing for action: {action}")
+
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -275,6 +290,14 @@ class Game:
             self.guide_frame_counters[action] = (idx + 1) % len(frames)
             self.guide_frame_timers[action] = 0
 
+    def play_guide_audio(self):
+        action = self.actions[self.current_action]
+        if action in self.guide_audio:
+            pygame.mixer.stop()  # Stop any currently playing sound
+            self.guide_audio[action].play()
+        else:
+            print(f"No audio loaded for action '{action}'")
+
     def button_over_detection(self, mouse_pos):
         for button in self.buttons.values():
             button[0] = button[4].collidepoint(mouse_pos)
@@ -314,6 +337,8 @@ def game_loop():
                     if game.current_action >= len(game.actions):
                         game.current_action = 0
 
+                    game.play_guide_audio()
+
         mouse_pos = pygame.mouse.get_pos()
         game.button_over_detection(mouse_pos)
         game.update_frame()
@@ -326,6 +351,7 @@ def game_loop():
 
 if __name__ == "__main__":
     pygame.init()
+    pygame.mixer.init()
 
     resources_path = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "resources")
