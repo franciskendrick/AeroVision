@@ -132,17 +132,6 @@ class Game:
                 text_pos = (x + (width - rect.width) // 2, y + (height - rect.height) // 2)
                 self.buttons[label] = [False, initial_state[label], surface, text_pos, btn_rect]
 
-        def setup_visual_instruction_text():
-            font_size = int(self.lp_top_rect.height * 0.55)
-            font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
-            text = font.render("VISUAL INSTRUCTIONS", True, (0, 0, 0))
-            rect = text.get_rect()
-            self.visinstr_text = text
-            self.visinstr_pos = (
-                self.lp_top_rect.centerx - rect.width // 2,
-                self.lp_top_rect.centery - rect.height // 2
-            )
-
         def load_guide_videos():
             self.guide_position = [0, 0]
             self.guide_videos = {}
@@ -241,9 +230,42 @@ class Game:
         setup_layout()
         setup_prediction_text()
         setup_buttons()
-        setup_visual_instruction_text()
         load_guide_videos()
         load_guide_audio()
+        self.setup_visual_instruction_text("None")
+
+    def setup_visual_instruction_text(self, instruction):
+        # Sizes relative to lp_top_rect
+        small_size = int(self.lp_top_rect.height * 0.35)
+        big_size = int(self.lp_top_rect.height * 0.75)
+
+        # Fonts
+        small_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
+        big_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_size)
+
+        # Render "INSTRUCTIONS"
+        title_text = small_font.render("INSTRUCTIONS:", True, (0, 0, 0))
+        title_rect = title_text.get_rect()
+
+        # Render instruction (e.g. "Straight Ahead")
+        instruction_text = big_font.render(instruction.upper().replace("_", " "), True, (0, 0, 0))
+        instruction_rect = instruction_text.get_rect()
+
+        # Positioning
+        total_height = title_rect.height + instruction_rect.height
+        start_y = self.lp_top_rect.centery - total_height // 2
+
+        self.visinstr_title_text = title_text
+        self.visinstr_title_pos = (
+            self.lp_top_rect.centerx - title_rect.width // 2,
+            start_y
+        )
+
+        self.visinstr_instr_text = instruction_text
+        self.visinstr_instr_pos = (
+            self.lp_top_rect.centerx - instruction_rect.width // 2,
+            start_y + title_rect.height
+        )
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -285,7 +307,8 @@ class Game:
             # Draw text
             for surface, pos in self.prediction_text_surfaces:
                 win.blit(surface, pos)
-            win.blit(self.visinstr_text, self.visinstr_pos)
+            win.blit(self.visinstr_title_text, self.visinstr_title_pos)
+            win.blit(self.visinstr_instr_text, self.visinstr_instr_pos)
 
             # Draw buttons
             for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
@@ -362,6 +385,7 @@ def game_loop():
                 btn_label = game.button_down_detection(mouse_pos)
                 if btn_label == "START":
                     game.training_started = True
+                    game.setup_visual_instruction_text(game.actions[game.current_action])
                     game.play_guide_audio()
                     game.buttons["START"][1] = False
                     game.buttons["END TRAINING"][1] = True
@@ -378,6 +402,7 @@ def game_loop():
                     if game.current_action >= len(game.actions):
                         game.current_action = 0
 
+                    game.setup_visual_instruction_text(game.actions[game.current_action])
                     game.play_guide_audio()
 
         mouse_pos = pygame.mouse.get_pos()
