@@ -72,21 +72,40 @@ class Game:
             font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
             font_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_size)
 
-            label_surface = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0))
-            value_surface = font_big.render("NONE", True, (0, 0, 0))
+            # Text content
+            label_left = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0))
+            value_left = font_big.render("NONE", True, (0, 0, 0))
+            label_right = font_small.render("PROBABILITY:", True, (0, 0, 0))
+            value_right = font_big.render("0%", True, (0, 0, 0))
 
-            label_rect = label_surface.get_rect()
-            value_rect = value_surface.get_rect()
+            # Rects
+            label_left_rect = label_left.get_rect()
+            value_left_rect = value_left.get_rect()
+            label_right_rect = label_right.get_rect()
+            value_right_rect = value_right.get_rect()
+
             spacing = int(2 * self.scale)
-            total_height = label_rect.height + value_rect.height + 2 * spacing
+            row_height = label_left_rect.height + value_left_rect.height + spacing
+            y_start = self.rp_top_rect.centery - row_height // 2
 
-            x = self.rp_top_rect.centerx
-            y_start = self.rp_top_rect.centery - total_height // 2
+            # Horizontal positions
+            margin = int(15 * self.scale)
+            left_x = self.rp_top_rect.left + margin
+            right_x = self.rp_top_rect.right - margin
 
             self.prediction_text_surfaces = [
-                (label_surface, (x - label_rect.width // 2, y_start)),
-                (value_surface, (x - value_rect.width // 2, y_start + label_rect.height + spacing))
+                # Left aligned (label and value)
+                (label_left, (left_x, y_start)),
+                (value_left, (left_x, y_start + label_left_rect.height + spacing)),
+
+                # Right aligned (label and value)
+                (label_right, (right_x - label_right_rect.width, y_start)),
+                (value_right, (right_x - value_right_rect.width, y_start + label_right_rect.height + spacing)),
             ]
+
+            # Store references to dynamically update values
+            self.predicted_label_surface = value_left
+            self.predicted_probability_surface = value_right
 
         def setup_buttons():
             font_size = int(16 * self.scale)
@@ -128,7 +147,7 @@ class Game:
                 "start_engine", "set_brakes", "chocks_inserted", "all_clear"
             ]
             offsets = [
-                (54, 10), (54, 10), (74, 10), (66, 12), (122, 55),
+                (54, 10), (74, 10), (54, 10), (66, 12), (122, 55),
                 (56, 0), (62, 0), (53, 0), (54, 0)
             ]
             sizes = [450, 450, 450, 450, 570, 430, 450, 430, 430]
@@ -141,7 +160,7 @@ class Game:
 
                 for path in frame_paths:
                     img = pygame.image.load(path).convert()
-                    if action == "turn_right":
+                    if action == "turn_left":
                         img = pygame.transform.flip(img, True, False)
                     scaled = pygame.transform.smoothscale(img, (int(size * self.scale), int(size * self.scale)))
                     frames.append(scaled)
