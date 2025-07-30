@@ -19,6 +19,8 @@ class Game:
 
         self.frame_surface = None
         self.training_started = False
+        self.instruction = "None"
+        self.current_action = 0
 
         self.init_scale(win_size)
         self.init_opencv(win_size)
@@ -121,8 +123,8 @@ class Game:
             y = int(317 * self.scale)
 
             initial_state = {
-                "END TRAINING": False,
-                "START": True
+                "END TRAINING": self.training_started,
+                "START": not self.training_started
             }
 
             self.buttons = {}
@@ -135,7 +137,6 @@ class Game:
         def load_guide_videos():
             self.guide_position = [0, 0]
             self.guide_videos = {}
-            self.current_action = 0
             self.action_configs = {
                 "straight_ahead": {
                     "offset": (54, 10),
@@ -232,7 +233,7 @@ class Game:
         setup_buttons()
         load_guide_videos()
         load_guide_audio()
-        self.setup_visual_instruction_text("None")
+        self.setup_visual_instruction_text(self.instruction)
 
     def setup_visual_instruction_text(self, instruction):
         # Sizes relative to lp_top_rect
@@ -377,6 +378,7 @@ def game_loop():
                 new_size = (new_width, new_height)
 
                 pygame.display.set_mode(new_size, pygame.RESIZABLE)
+                print(game.training_started)
                 game.init_scale(new_size)
                 game.init_opencv(new_size)
                 game.init_panels(new_size)
@@ -385,13 +387,17 @@ def game_loop():
                 btn_label = game.button_down_detection(mouse_pos)
                 if btn_label == "START":
                     game.training_started = True
-                    game.setup_visual_instruction_text(game.actions[game.current_action])
+                    game.instruction = game.actions[game.current_action]
+                    game.setup_visual_instruction_text(game.instruction)
                     game.play_guide_audio()
                     game.buttons["START"][1] = False
                     game.buttons["END TRAINING"][1] = True
 
                 elif btn_label == "END TRAINING":
                     game.training_started = False
+                    game.instruction = "None"
+                    game.current_action = 0
+                    game.setup_visual_instruction_text(game.instruction)
                     pygame.mixer.stop()
                     game.buttons["START"][1] = True
                     game.buttons["END TRAINING"][1] = False
@@ -402,7 +408,8 @@ def game_loop():
                     if game.current_action >= len(game.actions):
                         game.current_action = 0
 
-                    game.setup_visual_instruction_text(game.actions[game.current_action])
+                    game.instruction = game.actions[game.current_action]
+                    game.setup_visual_instruction_text(game.instruction)
                     game.play_guide_audio()
 
         mouse_pos = pygame.mouse.get_pos()
