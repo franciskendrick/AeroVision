@@ -8,8 +8,8 @@ from keras._tf_keras.keras.models import load_model
 
 
 class Game:
-    ACTIONS         = ["cut-engine", "start-engine", "stop", "straight_ahead", "turn_left", "turn_right"]
-    MODEL_PATH      = r"User Interface/model.h5"
+    ACTIONS         = ["cut_engine", "start_engine", "stop", "straight_ahead", "turn_left", "turn_right"]
+    MODEL_PATH      = r"LSTM 4/best_action_lstm.h5"
     SEQUENCE_LENGTH = 90
     THRESHOLD       = 0.4
 
@@ -337,8 +337,27 @@ class Game:
         if len(self.sequence) > self.SEQUENCE_LENGTH:
             self.sequence.pop(0)
 
+        # Default signal
+        signal = ""
+
+        # Pose-based gesture overrides (manual rules)
+        if results.pose_landmarks:
+            lm = results.pose_landmarks.landmark
+            right_wrist_y = lm[16].y
+            right_elbow_y = lm[14].y
+            left_wrist_y = lm[15].y
+            left_elbow_y = lm[13].y
+            mouth_y = lm[9].y
+
+            if (right_wrist_y < mouth_y and right_wrist_y < right_elbow_y and
+                    left_wrist_y > left_elbow_y):
+                signal = "all clear" if self.current_action == 7 else "set brakes"
+                self.signal = signal
+                self.confidence = 1.0
+                self.update_prediction_text()
+
         # Prediction
-        if len(self.sequence) == self.SEQUENCE_LENGTH:
+        if signal == "" and len(self.sequence) == self.SEQUENCE_LENGTH:
             input_seq = np.expand_dims(np.array(self.sequence), axis=0)  # shape: (1, 90, 99)
             probs = self.model.predict(input_seq, verbose=0)[0]
             max_idx = np.argmax(probs)
