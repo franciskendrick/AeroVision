@@ -320,6 +320,7 @@ class Game:
         if not ret:
             return
 
+        frame = cv2.flip(frame, 1)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
         # MediaPipe Pose processing
@@ -369,6 +370,7 @@ class Game:
 
         # Convert for Pygame (after drawing)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_rgb = cv2.flip(frame_rgb, 1)
         frame_rgb = np.rot90(frame_rgb)
         self.frame_surface = pygame.surfarray.make_surface(frame_rgb)
 
