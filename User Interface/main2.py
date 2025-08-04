@@ -4,9 +4,15 @@ import pygame
 import cv2
 import sys
 import os
+from keras._tf_keras.keras.models import load_model
 
 
 class Game:
+    ACTIONS         = ["cut-engine", "start-engine", "stop", "straight_ahead", "turn_left", "turn_right"]
+    MODEL_PATH      = r"User Interface/model.h5"
+    SEQUENCE_LENGTH = 90
+    THRESHOLD       = 0.4
+
     def __init__(self, win_size):
         self.cap = cv2.VideoCapture(0)
         self.mp_pose = mp.solutions.pose
@@ -52,6 +58,11 @@ class Game:
         max_width = win_size[0] // 2
         max_height = win_size[1]
 
+        self.model = load_model(self.MODEL_PATH)
+        self.sequence = []
+        self.signal = "NONE"
+        self.confidence = 0
+
         scale = min(max_width / cam_rect.width, max_height / cam_rect.height)
         new_size = (int(cam_rect.width * scale), int(cam_rect.height * scale))
         self.frame_draw_size = new_size
@@ -80,9 +91,9 @@ class Game:
 
             # Text content
             label_left = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0))
-            value_left = font_big.render("NONE", True, (0, 0, 0))
+            value_left = font_big.render(self.signal, True, (0, 0, 0))
             label_right = font_small.render("PROBABILITY:", True, (0, 0, 0))
-            value_right = font_big.render("0%", True, (0, 0, 0))
+            value_right = font_big.render(f"{self.confidence * 100:.0f}%", True, (0, 0, 0))
 
             # Rects
             label_left_rect = label_left.get_rect()
@@ -320,10 +331,61 @@ class Game:
                 connection_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2)
             )
 
+        # Keypoint vector
+        keypoints = self.extract_keypoints_full(results)
+        self.sequence.append(keypoints)
+        if len(self.sequence) > self.SEQUENCE_LENGTH:
+            self.sequence.pop(0)
+
+        # Prediction
+        if len(self.sequence) == self.SEQUENCE_LENGTH:
+            input_seq = np.expand_dims(np.array(self.sequence), axis=0)  # shape: (1, 90, 99)
+            probs = self.model.predict(input_seq, verbose=0)[0]
+            max_idx = np.argmax(probs)
+            self.confidence = probs[max_idx]
+
+            if self.confidence > self.THRESHOLD:
+                self.signal = self.ACTIONS[max_idx]
+                self.update_prediction_text()
+
         # Convert for Pygame (after drawing)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame_rgb = np.rot90(frame_rgb)
         self.frame_surface = pygame.surfarray.make_surface(frame_rgb)
+
+    def extract_keypoints_full(self, results):
+        if not results.pose_landmarks:
+            return np.zeros(33 * 3)
+        return np.array([[lm.x, lm.y, lm.z] for lm in results.pose_landmarks.landmark]).flatten()
+
+    def update_prediction_text(self):
+        big_size = int(self.rp_top_rect.height * 0.525)
+        font_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_size)
+
+        # Re-render dynamic values
+        formatted_signal = self.signal.replace("_", " ").upper()
+        value_left = font_big.render(formatted_signal, True, (0, 0, 0))
+        value_right = font_big.render(f"{self.confidence * 100:.0f}%", True, (0, 0, 0))
+
+        # Update stored surfaces
+        self.predicted_label_surface = value_left
+        self.predicted_probability_surface = value_right
+
+        # Update their positions in the main surfaces list
+        spacing = int(2 * self.scale)
+        small_size = int(self.rp_top_rect.height * 0.3)
+        font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
+        label_left_rect = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0)).get_rect()
+        label_right_rect = font_small.render("PROBABILITY:", True, (0, 0, 0)).get_rect()
+        row_height = label_left_rect.height + value_left.get_rect().height + spacing
+        y_start = self.rp_top_rect.centery - row_height // 2
+        margin = int(15 * self.scale)
+        left_x = self.rp_top_rect.left + margin
+        right_x = self.rp_top_rect.right - margin
+
+        # Update only the value parts (indexes 1 and 3)
+        self.prediction_text_surfaces[1] = (value_left, (left_x, y_start + label_left_rect.height + spacing))
+        self.prediction_text_surfaces[3] = (value_right, (right_x - value_right.get_width(), y_start + label_right_rect.height + spacing))
 
     # Draw
     def draw(self):
