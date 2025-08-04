@@ -187,7 +187,7 @@ class Game:
 
             self.actions = [
                 "start_engine", "straight_ahead", "turn_left", "turn_right",
-                "stop", "set_brakes", "cut_engine", "chocks_inserted", "all_clear"
+                "stop", "set_brakes", "cut_engine", "all_clear"
             ]
             self.frame_delays = [self.action_configs[action]["frame_delay"] for action in self.actions]
 
@@ -213,26 +213,62 @@ class Game:
                     ((x - x_offset) * self.scale, (y - y_offset) * self.scale)
                 )
 
-        def load_guide_audio():
-            self.guide_audio = {}
-            audio_dir = os.path.join(resources_path, "guide_audio")
+        def load_detection_audio():
+            self.detection_audio = {}
+            audio_dir = os.path.join(resources_path, "detection_audio")
 
             for action in self.actions:
-                path = os.path.join(audio_dir, f"{action}.mp3")
+                filename = f"{action}_dec.mp3"
+                path = os.path.join(audio_dir, filename)
                 if os.path.exists(path):
                     try:
-                        self.guide_audio[action] = pygame.mixer.Sound(path)
+                        self.detection_audio[action] = pygame.mixer.Sound(path)
                     except pygame.error as e:
-                        print(f"Failed to load audio for '{action}': {e}")
+                        print(f"[Detection] Failed to load '{filename}': {e}")
                 else:
-                    print(f"Missing audio for action: {action}")
+                    print(f"[Detection] Missing: {filename}")
+
+        def load_instruction_audio():
+            self.instruction_audio = {}
+            audio_dir = os.path.join(resources_path, "instruction_audio")
+
+            for action in self.actions:
+                filename = f"{action}_ins.mp3"
+                path = os.path.join(audio_dir, filename)
+                if os.path.exists(path):
+                    try:
+                        self.instruction_audio[action] = pygame.mixer.Sound(path)
+                    except pygame.error as e:
+                        print(f"[Instruction] Failed to load '{filename}': {e}")
+                else:
+                    print(f"[Instruction] Missing: {filename}")
+
+        def load_bookends_audio():
+            self.bookends_audio = {}
+            audio_dir = os.path.join(resources_path, "bookends_audio")
+            
+            for name in ["introduction", "ending"]:
+                filename = f"{name}.mp3"
+                path = os.path.join(audio_dir, filename)
+                if os.path.exists(path):
+                    try:
+                        self.bookends_audio[name] = pygame.mixer.Sound(path)
+                    except pygame.error as e:
+                        print(f"[Bookends] Failed to load '{filename}': {e}")
+                else:
+                    print(f"[Bookends] Missing: {filename}")
 
         # Execute setup routines
         setup_layout()
         setup_prediction_text()
         setup_buttons()
+
         load_guide_videos()
-        load_guide_audio()
+
+        load_detection_audio()
+        load_instruction_audio()
+        load_bookends_audio()
+
         self.setup_visual_instruction_text(self.instruction)
 
     def setup_visual_instruction_text(self, instruction):
@@ -268,6 +304,7 @@ class Game:
             start_y + title_rect.height
         )
 
+    # Update
     def update_frame(self):
         ret, frame = self.cap.read()
         if not ret:
@@ -289,6 +326,7 @@ class Game:
         frame_rgb = np.rot90(frame_rgb)
         self.frame_surface = pygame.surfarray.make_surface(frame_rgb)
 
+    # Draw
     def draw(self):
         win.fill((255, 255, 255)) 
 
@@ -344,14 +382,31 @@ class Game:
             self.guide_frame_counters[action] = (idx + 1) % len(frames)
             self.guide_frame_timers[action] = 0
 
-    def play_guide_audio(self):
+    # Audio
+    def play_detection_audio(self):
         action = self.actions[self.current_action]
-        if action in self.guide_audio:
-            pygame.mixer.stop()  # Stop any currently playing sound
-            self.guide_audio[action].play()
+        if action in self.detection_audio:
+            pygame.mixer.stop()
+            self.detection_audio[action].play()
         else:
-            print(f"No audio loaded for action '{action}'")
+            print(f"No detection audio loaded for action '{action}'")
 
+    def play_instruction_audio(self):
+        action = self.actions[self.current_action]
+        if action in self.instruction_audio:
+            pygame.mixer.stop()
+            self.instruction_audio[action].play()
+        else:
+            print(f"No instruction audio loaded for action '{action}'")
+
+    def play_bookends_audio(self, name):
+        if name in self.bookends_audio:
+            pygame.mixer.stop()
+            self.bookends_audio[name].play()
+        else:
+            print(f"No bookend audio loaded for name '{name}'")
+
+    # Buttons
     def button_over_detection(self, mouse_pos):
         for button in self.buttons.values():
             button[0] = button[4].collidepoint(mouse_pos)
@@ -361,6 +416,7 @@ class Game:
             if is_open and btn_rect.collidepoint(mouse_pos):
                 return label
 
+    # Quit
     def release(self):
         self.cap.release()
 
@@ -389,7 +445,7 @@ def game_loop():
                     game.training_started = True
                     game.instruction = game.actions[game.current_action]
                     game.setup_visual_instruction_text(game.instruction)
-                    game.play_guide_audio()
+                    game.play_instruction_audio()
                     game.buttons["START"][1] = False
                     game.buttons["END TRAINING"][1] = True
 
@@ -410,7 +466,7 @@ def game_loop():
 
                     game.instruction = game.actions[game.current_action]
                     game.setup_visual_instruction_text(game.instruction)
-                    game.play_guide_audio()
+                    game.play_instruction_audio()
 
         mouse_pos = pygame.mouse.get_pos()
         game.button_over_detection(mouse_pos)
