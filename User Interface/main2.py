@@ -21,6 +21,10 @@ class Game:
         self.training_started = False
         self.instruction = "None"
         self.current_action = 0
+        self.button_states = {
+            "END TRAINING": False,
+            "START": False
+        }
 
         self.init_scale(win_size)
         self.init_opencv(win_size)
@@ -121,18 +125,13 @@ class Game:
             width = max(r.width for r in rects) + padding_w
             height = max(r.height for r in rects) + padding_h
             y = int(317 * self.scale)
-
-            initial_state = {
-                "END TRAINING": self.training_started,
-                "START": not self.training_started
-            }
-
+            
             self.buttons = {}
             for i, (label, surface, rect) in enumerate(zip(labels, surfaces, rects)):
                 x = self.rp_bottom_rect.left + int(20 * self.scale) if i == 0 else self.rp_bottom_rect.right - width - int(20 * self.scale)
                 btn_rect = pygame.Rect(x, y, width, height)
                 text_pos = (x + (width - rect.width) // 2, y + (height - rect.height) // 2)
-                self.buttons[label] = [False, initial_state[label], surface, text_pos, btn_rect]
+                self.buttons[label] = [False, False, surface, text_pos, btn_rect]
 
         def load_guide_videos():
             self.guide_position = [0, 0]
@@ -405,6 +404,9 @@ class Game:
             self.bookends_audio[name].play()
         else:
             print(f"No bookend audio loaded for name '{name}'")
+    
+    def stop_current_audio(self):
+        pygame.mixer.stop()
 
     # Buttons
     def button_over_detection(self, mouse_pos):
@@ -422,6 +424,8 @@ class Game:
 
 
 def game_loop():
+    game.play_bookends_audio("introduction")
+
     run = True
     while run:
         for event in pygame.event.get():
@@ -434,7 +438,6 @@ def game_loop():
                 new_size = (new_width, new_height)
 
                 pygame.display.set_mode(new_size, pygame.RESIZABLE)
-                print(game.training_started)
                 game.init_scale(new_size)
                 game.init_opencv(new_size)
                 game.init_panels(new_size)
@@ -444,19 +447,27 @@ def game_loop():
                 if btn_label == "START":
                     game.training_started = True
                     game.instruction = game.actions[game.current_action]
+
                     game.setup_visual_instruction_text(game.instruction)
                     game.play_instruction_audio()
+
                     game.buttons["START"][1] = False
                     game.buttons["END TRAINING"][1] = True
+                    game.button_states["START"] = False
+                    game.button_states["END TRAINING"] = True
 
                 elif btn_label == "END TRAINING":
                     game.training_started = False
                     game.instruction = "None"
                     game.current_action = 0
+
                     game.setup_visual_instruction_text(game.instruction)
                     pygame.mixer.stop()
+
                     game.buttons["START"][1] = True
                     game.buttons["END TRAINING"][1] = False
+                    game.button_states["START"] = True
+                    game.button_states["END TRAINING"] = False
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_w:
@@ -467,6 +478,15 @@ def game_loop():
                     game.instruction = game.actions[game.current_action]
                     game.setup_visual_instruction_text(game.instruction)
                     game.play_instruction_audio()
+
+                elif event.key == pygame.K_SPACE:
+                    game.stop_current_audio()
+
+                    if not game.button_states["START"] and not game.training_started:
+                        game.buttons["START"][1] = True
+                        game.buttons["END TRAINING"][1] = False
+                        game.button_states["START"] = True
+                        game.button_states["END TRAINING"] = False
 
         mouse_pos = pygame.mouse.get_pos()
         game.button_over_detection(mouse_pos)
