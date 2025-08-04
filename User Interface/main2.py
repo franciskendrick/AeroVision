@@ -31,6 +31,7 @@ class Game:
             "END TRAINING": False,
             "START": False
         }
+        self.visibility_toggle = "X"
 
         self.init_scale(win_size)
         self.init_opencv(win_size)
@@ -124,7 +125,7 @@ class Game:
             self.predicted_label_surface = value_left
             self.predicted_probability_surface = value_right
 
-        def setup_buttons():
+        def setup_bookend_buttons():
             font_size = int(16 * self.scale)
             font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
             labels = ["END TRAINING", "START"]
@@ -271,7 +272,9 @@ class Game:
         # Execute setup routines
         setup_layout()
         setup_prediction_text()
-        setup_buttons()
+
+        setup_bookend_buttons()
+        self.setup_visibility_buttons()
 
         load_guide_videos()
 
@@ -280,6 +283,23 @@ class Game:
         load_bookends_audio()
 
         self.setup_visual_instruction_text(self.instruction)
+
+    def setup_visibility_buttons(self):
+        font_size = int(24 * self.scale)
+        font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
+        surface = font.render(self.visibility_toggle, True, (0, 0, 0))
+
+        padding_w = int(25 * self.scale)
+        padding_h = int(14 * self.scale)
+        rect = surface.get_rect()
+        width = rect.width + padding_w
+        height = rect.height + padding_h
+        y = int(317 * self.scale)
+
+        x = self.rp_bottom_rect.centerx - width // 2
+        btn_rect = pygame.Rect(x, y, width, height)
+        text_pos = (x + (width - rect.width) // 2, y + (height - rect.height) // 2)
+        self.visibility_button = [False, True, surface, text_pos, btn_rect]
 
     def setup_visual_instruction_text(self, instruction):
         # Sizes relative to lp_top_rect
@@ -325,7 +345,7 @@ class Game:
         
         # MediaPipe Pose processing
         results = self.pose.process(frame_rgb)
-        if results.pose_landmarks:
+        if results.pose_landmarks and self.visibility_toggle == "X":
             self.mp_drawing.draw_landmarks(
                 frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS,
                 landmark_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2),
@@ -439,6 +459,13 @@ class Game:
                 pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
                 win.blit(text, text_pos)
 
+            is_hovered, is_open, text, text_pos, btn_rect = self.visibility_button
+            fill = (192, 192, 192) if is_hovered and is_open else \
+                    (240, 240, 240) if is_open else (132, 132, 132)
+            pygame.draw.rect(win, fill, btn_rect)
+            pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
+            win.blit(text, text_pos)
+
         pygame.display.update()
 
     def draw_guide_animation(self, screen, action, frame_delay):
@@ -496,10 +523,17 @@ class Game:
         for button in self.buttons.values():
             button[0] = button[4].collidepoint(mouse_pos)
 
+        button = self.visibility_button
+        button[0] = button[4].collidepoint(mouse_pos)
+
     def button_down_detection(self, mouse_pos):
         for label, (_, is_open, *_, btn_rect) in self.buttons.items():
             if is_open and btn_rect.collidepoint(mouse_pos):
                 return label
+            
+        _, is_open, *_, btn_rect = self.visibility_button
+        if is_open and btn_rect.collidepoint(mouse_pos):
+            return "VISIBILITY"
 
     # Quit
     def release(self):
@@ -551,6 +585,11 @@ def game_loop():
                     game.buttons["END TRAINING"][1] = False
                     game.button_states["START"] = True
                     game.button_states["END TRAINING"] = False
+
+                elif btn_label == "VISIBILITY":
+                    game.visibility_toggle = "+" if game.visibility_toggle == "X" else "X"
+
+                    game.setup_visibility_buttons()
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_w:
