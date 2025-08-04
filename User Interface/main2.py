@@ -32,6 +32,7 @@ class Game:
             "START": False
         }
         self.visibility_toggle = "X"
+        self.signal_detected = False
 
         self.init_scale(win_size)
         self.init_opencv(win_size)
@@ -364,15 +365,22 @@ class Game:
         # Pose-based gesture overrides (manual rules)
         if results.pose_landmarks:
             lm = results.pose_landmarks.landmark
-            right_wrist_y = lm[16].y
+            right_wrist_y = lm[15].y
             right_elbow_y = lm[14].y
-            left_wrist_y = lm[15].y
-            left_elbow_y = lm[13].y
-            mouth_y = lm[9].y
-
-            if (right_wrist_y < mouth_y and right_wrist_y < right_elbow_y and
-                    left_wrist_y > left_elbow_y):
-                signal = "all clear" if self.current_action == 7 else "set brakes"
+            left_wrist_y = lm[16].y
+            left_hip_y = lm[23].y
+            right_shoulder_y = lm[12].y
+            right_eye = lm[5].y
+            
+            if (right_wrist_y < right_eye and right_wrist_y < right_elbow_y and
+                    left_wrist_y > left_hip_y):
+                signal = "all_clear"
+                self.signal = signal
+                self.confidence = 1.0
+                self.update_prediction_text()
+            elif (right_wrist_y < right_shoulder_y and right_wrist_y < right_elbow_y and
+                    left_wrist_y > left_hip_y):
+                signal = "set_brakes"
                 self.signal = signal
                 self.confidence = 1.0
                 self.update_prediction_text()
@@ -564,7 +572,6 @@ def game_loop():
                 if btn_label == "START":
                     game.training_started = True
                     game.instruction = game.actions[game.current_action]
-
                     game.setup_visual_instruction_text(game.instruction)
                     game.play_instruction_audio()
 
@@ -592,23 +599,29 @@ def game_loop():
                     game.setup_visibility_buttons()
 
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_w:
-                    game.current_action += 1
-                    if game.current_action >= len(game.actions):
-                        game.current_action = 0
-
-                    game.instruction = game.actions[game.current_action]
-                    game.setup_visual_instruction_text(game.instruction)
-                    game.play_instruction_audio()
-
-                elif event.key == pygame.K_SPACE:
+                if event.key == pygame.K_SPACE:
                     game.stop_current_audio()
-
                     if not game.button_states["START"] and not game.training_started:
                         game.buttons["START"][1] = True
                         game.buttons["END TRAINING"][1] = False
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
+
+        if game.training_started:
+            if not pygame.mixer.get_busy() and not game.signal_detected:
+                if game.signal == game.actions[game.current_action]:
+                    game.play_detection_audio()
+                    game.signal_detected = True
+
+            if not pygame.mixer.get_busy() and game.signal_detected:
+                game.current_action += 1
+                if game.current_action >= len(game.actions):
+                    print("ASSESSMENT ENDED")
+
+                game.instruction = game.actions[game.current_action]
+                game.setup_visual_instruction_text(game.instruction)
+                game.play_instruction_audio()
+                game.signal_detected = False
 
         mouse_pos = pygame.mouse.get_pos()
         game.button_over_detection(mouse_pos)
