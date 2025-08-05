@@ -474,8 +474,6 @@ class Game:
             pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
             win.blit(text, text_pos)
 
-        pygame.display.update()
-
     def draw_guide_animation(self, screen, action, frame_delay):
         if not hasattr(self, 'guide_frame_counters'):
             self.guide_frame_counters = {}
@@ -548,8 +546,102 @@ class Game:
         self.cap.release()
 
 
+class GameOver:
+    def __init__(self, win_size, signal_scores):
+        self.init_scale(win_size)
+
+        self.signal_scores = signal_scores
+        self.win_size = win_size
+
+        self.font = pygame.font.SysFont("Franklin Gothic Medium Condensed", int(26 * self.scale))
+        self.title_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", int(34 * self.scale), bold=True)
+
+        self.bg_color = (255, 255, 255)
+        self.border_color = (0, 0, 0)
+
+        self.prepare_text()  # Must be called before calculating popup height
+        self.calculate_popup_rect()
+
+    def init_scale(self, win_size):
+        base_width, base_height = 640, 360
+        scale_w = win_size[0] / base_width
+        scale_h = win_size[1] / base_height
+        self.scale = min(scale_w, scale_h)
+
+    def prepare_text(self):
+        self.text_surfaces = []
+        total_score = 0
+
+        for label, score in self.signal_scores.items():
+            total_score += score
+            text = f"{label} . . . . . {int(score * 100)}%"
+            surface = self.font.render(text, True, (0, 0, 0))
+            self.text_surfaces.append(surface)
+
+        self.overall_score = total_score / len(self.signal_scores)
+        self.status = "PASSED" if self.overall_score >= 0.80 else "NEEDS IMPROVEMENT"
+
+        self.overall_surface = self.title_font.render(
+            f"OVERALL SCORE: {round(self.overall_score * 5, 2)} / 5", True, (0, 0, 0)
+        )
+        self.status_surface = self.font.render(
+            f"Status: {self.status}", True, (0, 128, 0) if self.status == "PASSED" else (200, 0, 0)
+        )
+
+    def calculate_popup_rect(self):
+        spacing = int(30 * self.scale)
+        padding_top = int(5 * self.scale)
+        padding_bottom = int(5 * self.scale)
+        extra_spacing = int(25 * self.scale)
+
+        # Total content height
+        num_lines = len(self.text_surfaces) + 2  # main lines + overall + status
+        total_text_height = (num_lines * spacing) + extra_spacing
+        self.height = padding_top + total_text_height + padding_bottom
+        self.width = int(384 * self.scale)
+
+        self.popup_rect = pygame.Rect(
+            (self.win_size[0] - self.width) // 2,
+            (self.win_size[1] - self.height) // 2,
+            self.width,
+            self.height
+        )
+
+    def draw(self, win):
+        pygame.draw.rect(win, self.bg_color, self.popup_rect)
+        pygame.draw.rect(win, self.border_color, self.popup_rect, max(1, round(2 * self.scale)))
+
+        spacing = int(30 * self.scale)
+        extra_spacing = int(10 * self.scale)
+
+        cursor_y = self.popup_rect.y + int(20 * self.scale)
+
+        for surf in self.text_surfaces:
+            x = self.popup_rect.centerx - surf.get_width() // 2
+            win.blit(surf, (x, cursor_y))
+            cursor_y += spacing
+
+        cursor_y += extra_spacing
+        x = self.popup_rect.centerx - self.overall_surface.get_width() // 2
+        win.blit(self.overall_surface, (x, cursor_y))
+
+        cursor_y += spacing
+        x = self.popup_rect.centerx - self.status_surface.get_width() // 2
+        win.blit(self.status_surface, (x, cursor_y))
+
+
 def game_loop():
     game.play_bookends_audio("introduction")
+    scores = {
+        "Start Engine": 1.00,
+        "Straight Ahead": 0.90,
+        "Turn Left": 0.85,
+        "Turn Right": 0.60,
+        "Set Brakes": 1.00,
+        "Cut Engines": 0.75,
+        "All Clear": 1.00
+    }
+    game_over_popup = GameOver(win_size, scores)
 
     run = True
     while run:
@@ -627,6 +719,8 @@ def game_loop():
         game.button_over_detection(mouse_pos)
         game.update_frame()
         game.draw()
+        game_over_popup.draw(win)
+        pygame.display.update()
 
     game.release()
     pygame.quit()
