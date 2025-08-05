@@ -548,9 +548,13 @@ class Game:
 
 class GameOver:
     def __init__(self, win_size, signal_scores):
+        self.signal_scores = signal_scores
+
+        self.init(win_size)
+    
+    def init(self, win_size):
         self.init_scale(win_size)
 
-        self.signal_scores = signal_scores
         self.win_size = win_size
 
         self.font = pygame.font.SysFont("Franklin Gothic Medium Condensed", int(26 * self.scale))
@@ -620,26 +624,25 @@ class GameOver:
         self.button_surfaces = list(zip(labels, surfaces, rects))
 
     def calculate_popup_rect(self):
-        spacing = int(30 * self.scale)
-        padding_top = int(5 * self.scale)
-        padding_bottom = int(5 * self.scale)
-        extra_spacing = int(25 * self.scale)
+        # spacing = int(30 * self.scale)
+        # padding_top = int(5 * self.scale)
+        # padding_bottom = int(5 * self.scale)
+        # extra_spacing = int(25 * self.scale)
 
-        num_lines = len(self.text_surfaces) + 2  # main lines + overall + status
-        total_text_height = (num_lines * spacing) + extra_spacing
-        self.height = padding_top + total_text_height + self.button_height + int(15 * self.scale) + padding_bottom
-        self.width = int(384 * self.scale)
+        # num_lines = len(self.text_surfaces) + 2  # main lines + overall + status
+        # total_text_height = (num_lines * spacing) + extra_spacing
+        self.height = int((self.win_size[1]))
+        self.width = int((self.win_size[0] // 2))
 
         self.popup_rect = pygame.Rect(
-            (self.win_size[0] - self.width) // 2,
-            (self.win_size[1] - self.height) // 2,
+            0,
+            0,
             self.width,
             self.height
         )
 
     def draw(self, win):
         pygame.draw.rect(win, self.bg_color, self.popup_rect)
-        pygame.draw.rect(win, self.border_color, self.popup_rect, max(1, round(2 * self.scale)))
 
         spacing = int(30 * self.scale)
         extra_spacing = int(10 * self.scale)
@@ -682,7 +685,7 @@ def game_loop():
         "Cut Engines": 0.75,
         "All Clear": 1.00
     }
-    game_over_popup = GameOver(win_size, scores)
+    gameover = GameOver(win_size, scores)
 
     run = True
     while run:
@@ -699,6 +702,9 @@ def game_loop():
                 game.init_scale(new_size)
                 game.init_opencv(new_size)
                 game.init_panels(new_size)
+
+                gameover.init_scale(new_size)
+                gameover.init(new_size)
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 btn_label = game.button_down_detection(mouse_pos)
@@ -760,7 +766,7 @@ def game_loop():
         game.button_over_detection(mouse_pos)
         game.update_frame()
         game.draw()
-        game_over_popup.draw(win)
+        gameover.draw(win)
         pygame.display.update()
 
     game.release()
