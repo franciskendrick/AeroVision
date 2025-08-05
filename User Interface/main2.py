@@ -33,6 +33,7 @@ class Game:
         }
         self.visibility_toggle = "X"
         self.signal_detected = False
+        self.assessment_stage = False
 
         self.init_scale(win_size)
         self.init_opencv(win_size)
@@ -606,7 +607,7 @@ class GameOver:
         for (label, surf, rect), x in zip(self.button_surfaces, [x_left, x_right]):
             btn_rect = pygame.Rect(x, y, self.button_width, self.button_height)
             text_pos = (x + (self.button_width - rect.width) // 2, y + (self.button_height - rect.height) // 2)
-            self.buttons[label] = [False, False, surf, text_pos, btn_rect]
+            self.buttons[label] = [False, True, surf, text_pos, btn_rect]
 
     def measure_button_dimensions(self):
         font_size = int(16 * self.scale)
@@ -662,16 +663,23 @@ class GameOver:
         x = self.popup_rect.centerx - self.status_surface.get_width() // 2
         win.blit(self.status_surface, (x, cursor_y))
 
-        for label, (_, _, surf, text_pos, rect) in self.buttons.items():
-            pygame.draw.rect(win, (230, 230, 230), rect)
-            pygame.draw.rect(win, self.border_color, rect, max(1, round(2 * self.scale)))
-            win.blit(surf, text_pos)
+        # Draw buttons
+        border_width = max(1, round(2 * self.scale))
+        for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
+            fill = (192, 192, 192) if is_hovered and is_open else \
+                (240, 240, 240) if is_open else (132, 132, 132)
+            pygame.draw.rect(win, fill, btn_rect)
+            pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
+            win.blit(text, text_pos)
 
-    def button_over_detection(self):
-        pass
-    
-    def button_down_detection(self):
-        pass
+    def button_over_detection(self, mouse_pos):
+        for button in self.buttons.values():
+            button[0] = button[4].collidepoint(mouse_pos)
+
+    def button_down_detection(self, mouse_pos):
+        for label, (_, is_open, *_, btn_rect) in self.buttons.items():
+            if is_open and btn_rect.collidepoint(mouse_pos):
+                return label
 
 
 def game_loop():
@@ -686,6 +694,7 @@ def game_loop():
         "All Clear": 1.00
     }
     gameover = GameOver(win_size, scores)
+    game.assessment_stage = True
 
     run = True
     while run:
@@ -707,35 +716,63 @@ def game_loop():
                 gameover.init(new_size)
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                btn_label = game.button_down_detection(mouse_pos)
-                if btn_label == "START":
-                    game.training_started = True
-                    game.instruction = game.actions[game.current_action]
-                    game.setup_visual_instruction_text(game.instruction)
-                    game.play_instruction_audio()
+                mouse_pos = pygame.mouse.get_pos()
+                if not game.assessment_stage:
+                    btn_label = game.button_down_detection(mouse_pos)
+                    if btn_label == "START":
+                        game.training_started = True
+                        game.instruction = game.actions[game.current_action]
+                        game.setup_visual_instruction_text(game.instruction)
+                        game.play_instruction_audio()
 
-                    game.buttons["START"][1] = False
-                    game.buttons["END TRAINING"][1] = True
-                    game.button_states["START"] = False
-                    game.button_states["END TRAINING"] = True
+                        game.buttons["START"][1] = False
+                        game.buttons["END TRAINING"][1] = True
+                        game.button_states["START"] = False
+                        game.button_states["END TRAINING"] = True
 
-                elif btn_label == "END TRAINING":
-                    game.training_started = False
-                    game.instruction = "None"
-                    game.current_action = 0
+                    elif btn_label == "END TRAINING":
+                        game.training_started = False
+                        game.instruction = "None"
+                        game.current_action = 0
 
-                    game.setup_visual_instruction_text(game.instruction)
-                    pygame.mixer.stop()
+                        game.setup_visual_instruction_text(game.instruction)
+                        pygame.mixer.stop()
 
-                    game.buttons["START"][1] = True
-                    game.buttons["END TRAINING"][1] = False
-                    game.button_states["START"] = True
-                    game.button_states["END TRAINING"] = False
+                        game.buttons["START"][1] = True
+                        game.buttons["END TRAINING"][1] = False
+                        game.button_states["START"] = True
+                        game.button_states["END TRAINING"] = False
 
-                elif btn_label == "VISIBILITY":
-                    game.visibility_toggle = "+" if game.visibility_toggle == "X" else "X"
+                    elif btn_label == "VISIBILITY":
+                        game.visibility_toggle = "+" if game.visibility_toggle == "X" else "X"
 
-                    game.setup_visibility_buttons()
+                        game.setup_visibility_buttons()
+                else:
+                    btn_label = gameover.button_down_detection(mouse_pos)
+                    if btn_label == "Exit":
+                        run = False
+
+                    elif btn_label == "Retake Mission":
+                        # 1) Re-init the Game object to clear out all state:
+                        game.__init__(win_size)
+                        
+                        # 2) Reset any assessment flags
+                        game.assessment_stage = False
+                        game.training_started = False
+                        game.signal_detected = False
+                        
+                        # 3) Reset UI state to show only the START button
+                        game.buttons["START"][1] = False
+                        game.buttons["END TRAINING"][1] = False
+                        game.button_states["START"] = False
+                        game.button_states["END TRAINING"] = False
+                        
+                        # 4) Reset the “instruction” text to blank (or “None”)
+                        game.instruction = "None"
+                        game.setup_visual_instruction_text(game.instruction)
+                        
+                        # 5) (Optionally) play an intro bookend again
+                        game.play_bookends_audio("introduction")
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
@@ -755,18 +792,27 @@ def game_loop():
             if not pygame.mixer.get_busy() and game.signal_detected:
                 game.current_action += 1
                 if game.current_action >= len(game.actions):
+                    gameover = GameOver(win_size, scores)
+                    game.assessment_stage = True
                     print("ASSESSMENT ENDED")
 
                 game.instruction = game.actions[game.current_action]
                 game.setup_visual_instruction_text(game.instruction)
                 game.play_instruction_audio()
                 game.signal_detected = False
+        else:
+            if not pygame.mixer.get_busy():
+                game.buttons["START"][1] = True
+                game.button_states["START"] = True
 
-        mouse_pos = pygame.mouse.get_pos()
-        game.button_over_detection(mouse_pos)
         game.update_frame()
         game.draw()
-        gameover.draw(win)
+        mouse_pos = pygame.mouse.get_pos()
+        if not game.assessment_stage:
+            game.button_over_detection(mouse_pos)
+        else:
+            gameover.button_over_detection(mouse_pos)
+            gameover.draw(win)
         pygame.display.update()
 
     game.release()
