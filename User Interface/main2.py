@@ -26,7 +26,7 @@ class Game:
         self.frame_surface = None
         self.training_started = False
         self.instruction = "None"
-        self.current_action = 0
+        self.current_action = 7
         self.button_states = {
             "END TRAINING": False,
             "START": False
@@ -686,11 +686,11 @@ def game_loop():
     game.play_bookends_audio("introduction")
     scores = {
         "Start Engine": 1.00,
-        "Straight Ahead": 0.90,
-        "Turn Left": 0.85,
-        "Turn Right": 0.60,
+        "Straight Ahead": 1.00,
+        "Turn Left": 1.00,
+        "Turn Right": 1.00,
         "Set Brakes": 1.00,
-        "Cut Engines": 0.75,
+        "Cut Engines": 1.00,
         "All Clear": 1.00
     }
     gameover = GameOver(win_size, scores)
@@ -794,12 +794,13 @@ def game_loop():
                 if game.current_action >= len(game.actions):
                     gameover = GameOver(win_size, scores)
                     game.assessment_stage = True
+                    game.training_started = False
                     print("ASSESSMENT ENDED")
-
-                game.instruction = game.actions[game.current_action]
-                game.setup_visual_instruction_text(game.instruction)
-                game.play_instruction_audio()
-                game.signal_detected = False
+                else:
+                    game.instruction = game.actions[game.current_action]
+                    game.setup_visual_instruction_text(game.instruction)
+                    game.play_instruction_audio()
+                    game.signal_detected = False
         else:
             if not pygame.mixer.get_busy():
                 game.buttons["START"][1] = True
