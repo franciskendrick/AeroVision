@@ -559,8 +559,10 @@ class GameOver:
         self.bg_color = (255, 255, 255)
         self.border_color = (0, 0, 0)
 
-        self.prepare_text()  # Must be called before calculating popup height
-        self.calculate_popup_rect()
+        self.prepare_text()
+        self.measure_button_dimensions()  # New
+        self.calculate_popup_rect()       # Now we can safely calculate height
+        self.prepare_buttons()            # Now we can safely position buttons
 
     def init_scale(self, win_size):
         base_width, base_height = 640, 360
@@ -588,16 +590,44 @@ class GameOver:
             f"Status: {self.status}", True, (0, 128, 0) if self.status == "PASSED" else (200, 0, 0)
         )
 
+    def prepare_buttons(self):
+        self.buttons = {}
+
+        y = self.popup_rect.bottom - self.button_height - int(15 * self.scale)
+        total_button_width = 2 * self.button_width + self.button_spacing
+
+        x_left = self.popup_rect.centerx - (total_button_width // 2)
+        x_right = x_left + self.button_width + self.button_spacing
+
+        for (label, surf, rect), x in zip(self.button_surfaces, [x_left, x_right]):
+            btn_rect = pygame.Rect(x, y, self.button_width, self.button_height)
+            text_pos = (x + (self.button_width - rect.width) // 2, y + (self.button_height - rect.height) // 2)
+            self.buttons[label] = [False, False, surf, text_pos, btn_rect]
+
+    def measure_button_dimensions(self):
+        font_size = int(16 * self.scale)
+        font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
+        labels = ["Exit", "Retake Mission"]
+        surfaces = [font.render(label, True, (0, 0, 0)) for label in labels]
+
+        padding_w = int(25 * self.scale)
+        padding_h = int(20 * self.scale)
+        rects = [s.get_rect() for s in surfaces]
+        
+        self.button_width = max(r.width for r in rects) + padding_w
+        self.button_height = max(r.height for r in rects) + padding_h
+        self.button_spacing = int(20 * self.scale)
+        self.button_surfaces = list(zip(labels, surfaces, rects))
+
     def calculate_popup_rect(self):
         spacing = int(30 * self.scale)
         padding_top = int(5 * self.scale)
         padding_bottom = int(5 * self.scale)
         extra_spacing = int(25 * self.scale)
 
-        # Total content height
         num_lines = len(self.text_surfaces) + 2  # main lines + overall + status
         total_text_height = (num_lines * spacing) + extra_spacing
-        self.height = padding_top + total_text_height + padding_bottom
+        self.height = padding_top + total_text_height + self.button_height + int(15 * self.scale) + padding_bottom
         self.width = int(384 * self.scale)
 
         self.popup_rect = pygame.Rect(
@@ -628,6 +658,17 @@ class GameOver:
         cursor_y += spacing
         x = self.popup_rect.centerx - self.status_surface.get_width() // 2
         win.blit(self.status_surface, (x, cursor_y))
+
+        for label, (_, _, surf, text_pos, rect) in self.buttons.items():
+            pygame.draw.rect(win, (230, 230, 230), rect)
+            pygame.draw.rect(win, self.border_color, rect, max(1, round(2 * self.scale)))
+            win.blit(surf, text_pos)
+
+    def button_over_detection(self):
+        pass
+    
+    def button_down_detection(self):
+        pass
 
 
 def game_loop():
