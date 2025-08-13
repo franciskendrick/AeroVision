@@ -24,9 +24,9 @@ class Game:
             sys.exit()
 
         self.frame_surface = None
-        self.training_started = False
+        self.training_started = True
         self.instruction = "None"
-        self.current_action = 7
+        self.current_action = 0
         self.button_states = {
             "END TRAINING": False,
             "START": False
@@ -152,48 +152,48 @@ class Game:
             self.guide_videos = {}
             self.action_configs = {
                 "straight_ahead": {
-                    "offset": (54, 10),
-                    "size": 450,
+                    "offset": (64, 10),
+                    "size": 450 * 0.95,
                     "frame_delay": 5,
                 },
                 "turn_left": {
-                    "offset": (74, 10),
-                    "size": 450,
+                    "offset": (64, 10),
+                    "size": 450 * 0.95,
                     "frame_delay": 5,
                 },
                 "turn_right": {
-                    "offset": (54, 10),
-                    "size": 450,
+                    "offset": (43, 10),
+                    "size": 450 * 0.95,
                     "frame_delay": 5,
                 },
                 "stop": {
-                    "offset": (66, 12),
-                    "size": 450,
+                    "offset": (52, 12),
+                    "size": 450 * 0.95,
                     "frame_delay": 10,
                 },
                 "cut_engine": {
-                    "offset": (122, 55),
-                    "size": 570,
+                    "offset": (113, 55),
+                    "size": 570 * 0.95,
                     "frame_delay": 7,
                 },
                 "start_engine": {
-                    "offset": (56, 0),
-                    "size": 430,
+                    "offset": (43, 0),
+                    "size": 430 * 0.95,
                     "frame_delay": 5,
                 },
                 "set_brakes": {
-                    "offset": (62, 0),
-                    "size": 450,
+                    "offset": (27, 0),
+                    "size": 450 * 0.95,
                     "frame_delay": 10,
                 },
                 "chocks_inserted": {
                     "offset": (53, 0),
-                    "size": 430,
+                    "size": 430 * 0.95,
                     "frame_delay": 7,
                 },
                 "all_clear": {
-                    "offset": (54, 0),
-                    "size": 430,
+                    "offset": (44, 0),
+                    "size": 430 * 0.95,
                     "frame_delay": 10,
                 },
             }
@@ -214,7 +214,7 @@ class Game:
 
                 for path in frame_paths:
                     img = pygame.image.load(path).convert()
-                    if action == "turn_left":
+                    if action not in ["turn_right", "set_brakes"]:
                         img = pygame.transform.flip(img, True, False)
                     scaled = pygame.transform.smoothscale(img, (int(size * self.scale), int(size * self.scale)))
                     frames.append(scaled)
@@ -447,6 +447,7 @@ class Game:
             # Draw guide
             if self.training_started:
                 self.draw_guide_animation(win, self.actions[self.current_action], self.frame_delays[self.current_action])
+                # pygame.draw.line(win, (0, 0, 0), (self.lp_top_rect.centerx, 0), (self.lp_top_rect.centerx, self.rp_bottom_rect.bottom), 1)
 
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
             win.blit(scaled_frame, self.frame_draw_pos)
@@ -694,7 +695,7 @@ def game_loop():
         "All Clear": 1.00
     }
     gameover = GameOver(win_size, scores)
-    game.assessment_stage = True
+    # game.assessment_stage = True
 
     run = True
     while run:
@@ -782,6 +783,9 @@ def game_loop():
                         game.buttons["END TRAINING"][1] = False
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
+
+                if event.key == pygame.K_w:
+                    game.current_action += 1
 
         if game.training_started:
             if not pygame.mixer.get_busy() and not game.signal_detected:
