@@ -8,7 +8,7 @@ from keras._tf_keras.keras.models import load_model
 
 
 class Game:
-    ACTIONS         = ["cut_engine", "start_engine", "stop", "straight_ahead", "turn_left", "turn_right"]
+    ACTIONS         = ["chocks-inserted", "cut_engine", "start_engine", "stop", "straight_ahead", "turn_left", "turn_right"]
     MODEL_PATH      = r"LSTM 4/best_action_lstm.h5"
     SEQUENCE_LENGTH = 90
     THRESHOLD       = 0.4
@@ -783,9 +783,6 @@ def game_loop():
                         game.buttons["END TRAINING"][1] = False
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
-
-                if event.key == pygame.K_w:
-                    game.current_action += 1
 
         if game.training_started:
             if not pygame.mixer.get_busy() and not game.signal_detected:
