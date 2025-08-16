@@ -85,6 +85,7 @@ class Game:
             self.rp_top_rect = pygame.Rect(center_x, 0, panel_width, cam_top_y)
             self.rp_bottom_rect = pygame.Rect(center_x, cam_bottom_y, panel_width, full_height - cam_bottom_y)
             self.lp_top_rect = pygame.Rect(0, 0, center_x, cam_top_y)
+            self.lp_bottom_rect = pygame.Rect(0, cam_bottom_y, panel_width, full_height - cam_bottom_y)
 
         def setup_prediction_text():
             small_size = int(self.rp_top_rect.height * 0.3)
@@ -177,12 +178,12 @@ class Game:
                     "frame_delay": 7,
                 },
                 "start_engine": {
-                    "offset": (43, 0),
+                    "offset": (43, 3),
                     "size": 430 * 0.95,
                     "frame_delay": 5,
                 },
                 "set_brakes": {
-                    "offset": (27, 0),
+                    "offset": (27, 2),
                     "size": 450 * 0.95,
                     "frame_delay": 10,
                 },
@@ -256,6 +257,38 @@ class Game:
                 else:
                     print(f"[Instruction] Missing: {filename}")
 
+        def setup_progressbar():
+            num_segments = 9
+            bar_width = int(300 * self.scale)   # total width of the bar
+            bar_height = int(15 * self.scale)   # height of each rectangle
+            gap = int(1 * self.scale)           # spacing between rectangles
+
+            # Calculate the total width including gaps
+            total_width = (num_segments * bar_width // num_segments) + (gap * (num_segments - 1))
+
+            # Center horizontally in bottom left panel (lp_bottom_rect)
+            start_x = self.lp_bottom_rect.centerx - total_width // 2
+            y = self.lp_bottom_rect.y + int(30 * self.scale)
+
+            # Each segment width
+            segment_width = bar_width // num_segments
+
+            # Create rectangles
+            self.progress_rects = []
+            for i in range(num_segments):
+                rect = pygame.Rect(
+                    start_x + i * (segment_width + gap),
+                    y,
+                    segment_width,
+                    bar_height
+                )
+                self.progress_rects.append(rect)
+
+            # Font for progress text
+            font_size = int(18 * self.scale)
+            self.progress_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
+            self.progress_text_pos = (self.progress_rects[0].x + int(42 * self.scale), y - int(8 * self.scale))
+
         def load_bookends_audio():
             self.bookends_audio = {}
             audio_dir = os.path.join(resources_path, "bookends_audio")
@@ -285,6 +318,8 @@ class Game:
         load_bookends_audio()
 
         self.setup_visual_instruction_text(self.instruction)
+
+        setup_progressbar()
 
     def setup_visibility_buttons(self):
         font_size = int(24 * self.scale)
@@ -443,11 +478,22 @@ class Game:
 
         border_width = max(1, round(2 * self.scale))
 
-        if self.frame_surface:     
+        if self.frame_surface:
             # Draw guide
             if self.training_started:
                 self.draw_guide_animation(win, self.actions[self.current_action], self.frame_delays[self.current_action])
                 # pygame.draw.line(win, (0, 0, 0), (self.lp_top_rect.centerx, 0), (self.lp_top_rect.centerx, self.rp_bottom_rect.bottom), 1)
+
+                # Draw bar segments
+                for i, rect in enumerate(self.progress_rects):
+                    color = (0, 200, 0) if i < self.current_action else (180, 180, 180)  # green if lit
+                    pygame.draw.rect(win, color, rect)
+
+                # Draw progress percentage text
+                percentage = round((self.current_action / len(self.progress_rects)) * 100)
+                text_surface = self.progress_font.render(f"Progress: {percentage}%", True, (0, 0, 0))
+                text_rect = text_surface.get_rect(center=self.progress_text_pos)
+                win.blit(text_surface, text_rect)
 
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
             win.blit(scaled_frame, self.frame_draw_pos)
