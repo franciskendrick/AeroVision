@@ -8,7 +8,7 @@ from keras._tf_keras.keras.models import load_model
 
 
 class Game:
-    ACTIONS         = ["chocks-inserted", "cut_engine", "start_engine", "stop", "straight_ahead", "turn_left", "turn_right"]
+    ACTIONS         = ["chocks_inserted", "cut_engine", "start_engine", "stop", "straight_ahead", "turn_left", "turn_right"]
     MODEL_PATH      = r"LSTM 4/best_action_lstm.h5"
     SEQUENCE_LENGTH = 90
     THRESHOLD       = 0.4
@@ -24,7 +24,7 @@ class Game:
             sys.exit()
 
         self.frame_surface = None
-        self.training_started = True
+        self.training_started = False
         self.instruction = "None"
         self.current_action = 0
         self.button_states = {
@@ -187,8 +187,8 @@ class Game:
                     "frame_delay": 10,
                 },
                 "chocks_inserted": {
-                    "offset": (53, 0),
-                    "size": 430 * 0.95,
+                    "offset": (38, -7),
+                    "size": 430 * 0.92,
                     "frame_delay": 7,
                 },
                 "all_clear": {
@@ -200,7 +200,7 @@ class Game:
 
             self.actions = [
                 "start_engine", "straight_ahead", "turn_left", "turn_right",
-                "stop", "set_brakes", "cut_engine", "all_clear"
+                "stop", "set_brakes", "chocks_inserted", "cut_engine", "all_clear"
             ]
             self.frame_delays = [self.action_configs[action]["frame_delay"] for action in self.actions]
 
@@ -691,6 +691,7 @@ def game_loop():
         "Turn Left": 1.00,
         "Turn Right": 1.00,
         "Set Brakes": 1.00,
+        "Chocks Inserted": 1.00,
         "Cut Engines": 1.00,
         "All Clear": 1.00
     }
@@ -783,6 +784,9 @@ def game_loop():
                         game.buttons["END TRAINING"][1] = False
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
+
+                if event.key == pygame.K_w:
+                    game.current_action += 1
 
         if game.training_started:
             if not pygame.mixer.get_busy() and not game.signal_detected:
