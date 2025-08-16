@@ -291,7 +291,7 @@ class Game:
 
         def load_bookends_audio():
             self.bookends_audio = {}
-            audio_dir = os.path.join(resources_path, "bookends_audio")
+            audio_dir = os.path.join(resources_path, "bookends")
             
             for name in ["introduction", "ending"]:
                 filename = f"{name}.mp3"
@@ -397,8 +397,6 @@ class Game:
 
         # Default signal
         signal = ""
-
-        # Pose-based gesture overrides (manual rules)
         if results.pose_landmarks:
             lm = results.pose_landmarks.landmark
             right_wrist_y = lm[15].y
@@ -475,21 +473,16 @@ class Game:
     # Draw
     def draw(self):
         win.fill((255, 255, 255)) 
-
         border_width = max(1, round(2 * self.scale))
 
         if self.frame_surface:
             # Draw guide
             if self.training_started:
                 self.draw_guide_animation(win, self.actions[self.current_action], self.frame_delays[self.current_action])
-                # pygame.draw.line(win, (0, 0, 0), (self.lp_top_rect.centerx, 0), (self.lp_top_rect.centerx, self.rp_bottom_rect.bottom), 1)
-
-                # Draw bar segments
                 for i, rect in enumerate(self.progress_rects):
                     color = (0, 200, 0) if i < self.current_action else (180, 180, 180)  # green if lit
                     pygame.draw.rect(win, color, rect)
 
-                # Draw progress percentage text
                 percentage = round((self.current_action / len(self.progress_rects)) * 100)
                 text_surface = self.progress_font.render(f"Progress: {percentage}%", True, (0, 0, 0))
                 text_rect = text_surface.get_rect(center=self.progress_text_pos)
@@ -568,10 +561,76 @@ class Game:
             self.bookends_audio[name].play()
         else:
             print(f"No bookend audio loaded for name '{name}'")
-    
+            
     def stop_current_audio(self):
         pygame.mixer.stop()
 
+    # Videos
+    def play_introduction_video(self):
+        self.play_bookends_audio("introduction")
+
+        # Resolve path from load_bookends(); fall back to resources if needed
+        intro_path = getattr(self, "introvid_path", None)
+        if not intro_path or not os.path.exists(intro_path):
+            intro_path = os.path.join(resources_path, "bookends", "introduction.mp4")
+            if not os.path.exists(intro_path):
+                print("[Bookends] introduction.mp4 not found.")
+                return
+
+        cap = cv2.VideoCapture(intro_path)
+        if not cap.isOpened():
+            print("[Bookends] Failed to open introduction.mp4")
+            return
+
+        # Use video FPS (fallback 30)
+        fps = 30
+        clock = pygame.time.Clock()
+
+
+        playing = True
+        while playing:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    cap.release()
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.VIDEORESIZE:
+                    # Resize window dynamically
+                    new_width = max(640, event.w)
+                    new_height = max(360, event.h)
+                    new_size = (new_width, new_height)
+
+                    pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
+
+                    game.init_scale(new_size)
+                    game.init_opencv(new_size)
+                    game.init_panels(new_size)
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    playing = False  # Skip video with ESC
+
+            ret, frame = cap.read()
+            if not ret:
+                break  # End of video
+
+            # Convert OpenCV frame → Pygame surface
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = cv2.flip(frame, 1)
+            frame = np.rot90(frame)  # Keep only if orientation needs correction
+            surface = pygame.surfarray.make_surface(frame)
+
+            # Scale to fill entire window
+            win_size = win.get_size()
+            scaled = pygame.transform.smoothscale(surface, win_size)
+
+            # Draw
+            win.blit(scaled, (0, 0))
+            pygame.display.update()
+
+            clock.tick(fps)
+
+        cap.release()
+        self.introvid_playing = False
+        
     # Buttons
     def button_over_detection(self, mouse_pos):
         for button in self.buttons.values():
@@ -730,7 +789,7 @@ class GameOver:
 
 
 def game_loop():
-    game.play_bookends_audio("introduction")
+    game.play_introduction_video()
     scores = {
         "Start Engine": 1.00,
         "Straight Ahead": 1.00,
@@ -820,7 +879,7 @@ def game_loop():
                         game.setup_visual_instruction_text(game.instruction)
                         
                         # 5) (Optionally) play an intro bookend again
-                        game.play_bookends_audio("introduction")
+                        game.play_introduction_video()
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
