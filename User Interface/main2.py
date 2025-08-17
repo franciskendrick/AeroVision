@@ -215,7 +215,7 @@ class Game:
 
                 for path in frame_paths:
                     img = pygame.image.load(path).convert()
-                    if action not in ["turn_right", "set_brakes"]:
+                    if action not in ["set_brakes"]:
                         img = pygame.transform.flip(img, True, False)
                     scaled = pygame.transform.smoothscale(img, (int(size * self.scale), int(size * self.scale)))
                     frames.append(scaled)
@@ -586,7 +586,6 @@ class Game:
         fps = 30
         clock = pygame.time.Clock()
 
-
         playing = True
         while playing:
             for event in pygame.event.get():
@@ -605,9 +604,11 @@ class Game:
                     game.init_scale(new_size)
                     game.init_opencv(new_size)
                     game.init_panels(new_size)
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    playing = False  # Skip video with ESC
-
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        game.stop_current_audio()
+                        playing = False
+                        
             ret, frame = cap.read()
             if not ret:
                 break  # End of video
@@ -890,8 +891,18 @@ def game_loop():
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
 
-                if event.key == pygame.K_w:
+                if event.key == pygame.K_w:  # !!!
                     game.current_action += 1
+                    if game.current_action >= len(game.actions):
+                        gameover = GameOver(win_size, scores)
+                        game.assessment_stage = True
+                        game.training_started = False
+                        print("ASSESSMENT ENDED")
+                    else:
+                        game.instruction = game.actions[game.current_action]
+                        game.setup_visual_instruction_text(game.instruction)
+                        game.play_instruction_audio()
+                        game.signal_detected = False
 
         if game.training_started:
             if not pygame.mixer.get_busy() and not game.signal_detected:
