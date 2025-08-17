@@ -158,12 +158,12 @@ class Game:
                     "frame_delay": 5,
                 },
                 "turn_left": {
-                    "offset": (64, 10),
+                    "offset": (43, 10),
                     "size": 450 * 0.95,
                     "frame_delay": 5,
                 },
                 "turn_right": {
-                    "offset": (43, 10),
+                    "offset": (64, 10),
                     "size": 450 * 0.95,
                     "frame_delay": 5,
                 },
@@ -215,7 +215,7 @@ class Game:
 
                 for path in frame_paths:
                     img = pygame.image.load(path).convert()
-                    if action not in ["set_brakes"]:
+                    if action not in ["turn_left", "set_brakes"]:
                         img = pygame.transform.flip(img, True, False)
                     scaled = pygame.transform.smoothscale(img, (int(size * self.scale), int(size * self.scale)))
                     frames.append(scaled)
@@ -226,6 +226,15 @@ class Game:
                     frames,
                     ((x - x_offset) * self.scale, (y - y_offset) * self.scale)
                 )
+
+            # Pilot's POV text
+            small_size = int(16 * self.scale)
+            font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
+            self.pilots_pov_text = font_small.render("From Pilot's Point of View", True, (0, 0, 0))
+
+            # Anchor to top-right of left panel
+            self.pilots_pov_rect = self.pilots_pov_text.get_rect()
+            self.pilots_pov_rect.topleft = (self.lp_top_rect.left + 2, self.lp_top_rect.bottom + 2)
 
         def load_detection_audio():
             self.detection_audio = {}
@@ -487,6 +496,10 @@ class Game:
                 text_surface = self.progress_font.render(f"Progress: {percentage}%", True, (0, 0, 0))
                 text_rect = text_surface.get_rect(center=self.progress_text_pos)
                 win.blit(text_surface, text_rect)
+
+                # Draw Pilot's POV text
+                if self.current_action == 2 or self.current_action == 3:
+                    win.blit(self.pilots_pov_text, self.pilots_pov_rect)
 
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
             win.blit(scaled_frame, self.frame_draw_pos)
