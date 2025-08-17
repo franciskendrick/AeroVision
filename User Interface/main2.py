@@ -5,6 +5,14 @@ import cv2
 import sys
 import os
 from keras._tf_keras.keras.models import load_model
+import ctypes
+
+
+def get_pygame_window_pos():
+    hwnd = pygame.display.get_wm_info()['window']
+    rect = ctypes.wintypes.RECT()
+    ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    return (rect.left, rect.top)
 
 
 class Game:
@@ -14,6 +22,8 @@ class Game:
     THRESHOLD       = 0.4
 
     def __init__(self, win_size):
+        self.win_size = win_size
+
         self.cap = cv2.VideoCapture(0)
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose()
@@ -266,6 +276,14 @@ class Game:
                 else:
                     print(f"[Instruction] Missing: {filename}")
 
+        def load_chockesinserted_video():
+            popup_path = os.path.join(resources_path, "chocks_inserted_popup.mp4")
+            if os.path.exists(popup_path):
+                self.chocks_inserted_video = popup_path
+            else:
+                self.chocks_inserted_video = None
+                print("[Chocks Inserted] Missing: chocks_inserted_popup.mp4")
+
         def setup_progressbar():
             num_segments = 9
             bar_width = int(300 * self.scale)   # total width of the bar
@@ -324,6 +342,7 @@ class Game:
 
         load_detection_audio()
         load_instruction_audio()
+        load_chockesinserted_video()
         load_bookends_audio()
 
         self.setup_visual_instruction_text(self.instruction)
@@ -614,6 +633,7 @@ class Game:
 
                     pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
 
+                    game.win_size = new_size
                     game.init_scale(new_size)
                     game.init_opencv(new_size)
                     game.init_panels(new_size)
@@ -644,7 +664,65 @@ class Game:
 
         cap.release()
         self.introvid_playing = False
-        
+
+    def play_chocksinserted_video(self, pygamewin_pos):
+        if not getattr(self, "chocks_inserted_video", None):
+            print("[Chocks Inserted] No video loaded.")
+            return
+
+        cap = cv2.VideoCapture(self.chocks_inserted_video)
+        if not cap.isOpened():
+            print(f"[Chocks Inserted] Failed to open video: {self.chocks_inserted_video}")
+            return
+
+        # Get FPS to control playback speed (fall back to 30 if missing)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        fps = int(fps) if fps and fps > 0 else 30
+        delay = int(1000 / fps)
+
+        # Get original video resolution
+        vid_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        vid_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        # Compute aspect ratio
+        aspect_ratio = vid_width / vid_height if vid_height != 0 else 1.0
+
+        # Get actual window size from your Pygame window
+        win_width, win_height = self.win_size  
+
+        # Scale video so that its height <= window height
+        scaled_height = win_height
+        scaled_width = int(scaled_height * aspect_ratio)
+
+        # If scaled width is larger than window width, clamp to width
+        if scaled_width > win_width:
+            scaled_width = win_width
+            scaled_height = int(scaled_width / aspect_ratio)
+
+        # Create popup window scaled to fit inside actual window
+        cv2.namedWindow("Chocks Inserted", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Chocks Inserted", scaled_width, scaled_height)
+
+        # Compute safe position: left of Pygame window, but never off-screen
+        x = max(0, pygamewin_pos[0] - scaled_width - 5)
+        y = pygamewin_pos[1]
+
+        cv2.moveWindow("Chocks Inserted", x, y)
+
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            cv2.imshow("Chocks Inserted", frame)
+
+            # Just wait for the duration; ignore user input
+            if cv2.waitKey(delay) == -1:
+                pass
+
+        cap.release()
+        cv2.destroyWindow("Chocks Inserted")
+
     # Buttons
     def button_over_detection(self, mouse_pos):
         for button in self.buttons.values():
@@ -920,6 +998,8 @@ def game_loop():
         if game.training_started:
             if not pygame.mixer.get_busy() and not game.signal_detected:
                 if game.signal == game.actions[game.current_action]:
+                    if game.current_action == 6:  # chocks inserted
+                        game.play_chocksinserted_video(get_pygame_window_pos())
                     game.play_detection_audio()
                     game.signal_detected = True
 
