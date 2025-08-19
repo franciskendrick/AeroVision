@@ -779,15 +779,22 @@ class GameOver:
 
         for label, score in self.signal_scores.items():
             total_score += score
-            text = f"{label} . . . . . {int(score * 100)}%"
+            text = f"{label} . . . . . {int(score)}%"
             surface = self.font.render(text, True, (0, 0, 0))
             self.text_surfaces.append(surface)
 
         self.overall_score = total_score / len(self.signal_scores)
-        self.status = "PASSED" if self.overall_score >= 0.80 else "NEEDS IMPROVEMENT"
+        self.overall_score =50
+        self.status = "UNSATISFACTORY" 
+        if self.overall_score >= 90:
+            self.status = "EXCELLENT"
+        elif self.overall_score >= 75:
+            self.status = "GOOD"
+        elif self.overall_score >= 50:
+            self.status = "NEEDS IMPROVEMENT"
 
         self.overall_surface = self.title_font.render(
-            f"OVERALL SCORE: {round(self.overall_score * 5, 2)} / 5", True, (0, 0, 0)
+            f"OVERALL SCORE: {round(self.overall_score * 5, 2)} / 5.0", True, (0, 0, 0)
         )
         self.status_surface = self.font.render(
             f"Status: {self.status}", True, (0, 128, 0) if self.status == "PASSED" else (200, 0, 0)
@@ -844,9 +851,9 @@ class GameOver:
         pygame.draw.rect(win, self.bg_color, self.popup_rect)
 
         spacing = int(30 * self.scale)
-        extra_spacing = int(10 * self.scale)
+        extra_spacing = int(5 * self.scale)
 
-        cursor_y = self.popup_rect.y + int(20 * self.scale)
+        cursor_y = self.popup_rect.y + int(10 * self.scale)
 
         for surf in self.text_surfaces:
             x = self.popup_rect.centerx - surf.get_width() // 2
@@ -883,17 +890,17 @@ class GameOver:
 def game_loop():
     game.play_introduction_video()
     scores = {
-        "Start Engine": 1.00,
-        "Straight Ahead": 1.00,
-        "Turn Left": 1.00,
-        "Turn Right": 1.00,
-        "Set Brakes": 1.00,
-        "Chocks Inserted": 1.00,
-        "Cut Engines": 1.00,
-        "All Clear": 1.00
+        "Start Engine": 100,
+        "Straight Ahead": 100,
+        "Turn Left": 100,
+        "Turn Right": 100,
+        "Set Brakes": 100,
+        "Chocks Inserted": 100,
+        "Cut Engines": 100,
+        "All Clear": 100
     }
     gameover = GameOver(win_size, scores)
-    # game.assessment_stage = True
+    game.assessment_stage = True
 
     run = True
     while run:
