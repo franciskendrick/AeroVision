@@ -17,7 +17,7 @@ def get_pygame_window_pos():
 
 class Game:
     ACTIONS         = ["chocks_inserted", "cut_engine", "start_engine", "stop", "straight_ahead", "turn_left", "turn_right"]
-    MODEL_PATH      = r"LSTM 4/best_action_lstm.h5"
+    MODEL_PATH      = r"User Interface/model.h5"
     SEQUENCE_LENGTH = 90
     THRESHOLD       = 0.4
 
