@@ -4,6 +4,7 @@ import pygame
 import cv2
 import sys
 import os
+import time
 from keras._tf_keras.keras.models import load_model
 import ctypes
 
@@ -15,11 +16,35 @@ def get_pygame_window_pos():
     return (rect.left, rect.top)
 
 
+def pretty_label(key: str) -> str:
+    mapping = {
+        "start_engine": "Start Engine",
+        "straight_ahead": "Straight Ahead",
+        "turn_left": "Turn Left",
+        "turn_right": "Turn Right",
+        "stop": "Set Brakes",
+        "set_brakes": "Set Brakes",
+        "chocks_inserted": "Chocks Inserted",
+        "cut_engine": "Cut Engines",
+        "all_clear": "All Clear",
+    }
+    return mapping.get(key, key.replace("_", " ").title())
+
+
 class Game:
-    ACTIONS         = ["chocks_inserted", "cut_engine", "start_engine", "stop", "straight_ahead", "turn_left", "turn_right"]
+    ACTIONS = [
+        "chocks_inserted", "cut_engine", "start_engine", "stop",
+        "straight_ahead", "turn_left", "turn_right"
+    ]
+    # Model / detection
     MODEL_PATH      = r"User Interface/model.h5"
     SEQUENCE_LENGTH = 90
     THRESHOLD       = 0.4
+
+    # Scoring parameters (lead's formula)
+    PENALTY_RATE    = 5.0   # percent per second
+    TMAX            = 20.0  # seconds; cap for TimeToCorrectError
+    ACCEPT_N        = 5     # consecutive frames required to accept a detection
 
     def __init__(self, win_size):
         self.win_size = win_size
@@ -42,8 +67,14 @@ class Game:
             "START": False
         }
         self.visibility_toggle = "X"
-        self.signal_detected = False
+        self.signal_detected = False  # accepted detection for current action
         self.assessment_stage = False
+
+        # Scoring state
+        self.scores = {}  # {Pretty Label: score (0..100)}
+        self.t_prompt = None
+        self.accept_counter = 0
+        self.accepted_for_action = False
 
         self.init_scale(win_size)
         self.init_opencv(win_size)
@@ -74,7 +105,7 @@ class Game:
         self.model = load_model(self.MODEL_PATH)
         self.sequence = []
         self.signal = "NONE"
-        self.confidence = 0
+        self.confidence = 0.0
 
         scale = min(max_width / cam_rect.width, max_height / cam_rect.height)
         new_size = (int(cam_rect.width * scale), int(cam_rect.height * scale))
@@ -103,13 +134,11 @@ class Game:
             font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
             font_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_size)
 
-            # Text content
             label_left = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0))
             value_left = font_big.render(self.signal, True, (0, 0, 0))
             label_right = font_small.render("PROBABILITY:", True, (0, 0, 0))
             value_right = font_big.render(f"{self.confidence * 100:.0f}%", True, (0, 0, 0))
 
-            # Rects
             label_left_rect = label_left.get_rect()
             value_left_rect = value_left.get_rect()
             label_right_rect = label_right.get_rect()
@@ -119,22 +148,17 @@ class Game:
             row_height = label_left_rect.height + value_left_rect.height + spacing
             y_start = self.rp_top_rect.centery - row_height // 2
 
-            # Horizontal positions
             margin = int(15 * self.scale)
             left_x = self.rp_top_rect.left + margin
             right_x = self.rp_top_rect.right - margin
 
             self.prediction_text_surfaces = [
-                # Left aligned (label and value)
                 (label_left, (left_x, y_start)),
                 (value_left, (left_x, y_start + label_left_rect.height + spacing)),
-
-                # Right aligned (label and value)
                 (label_right, (right_x - label_right_rect.width, y_start)),
                 (value_right, (right_x - value_right_rect.width, y_start + label_right_rect.height + spacing)),
             ]
 
-            # Store references to dynamically update values
             self.predicted_label_surface = value_left
             self.predicted_probability_surface = value_right
 
@@ -162,51 +186,15 @@ class Game:
             self.guide_position = [0, 0]
             self.guide_videos = {}
             self.action_configs = {
-                "straight_ahead": {
-                    "offset": (64, 10),
-                    "size": 450 * 0.95,
-                    "frame_delay": 5,
-                },
-                "turn_left": {
-                    "offset": (43, 10),
-                    "size": 450 * 0.95,
-                    "frame_delay": 5,
-                },
-                "turn_right": {
-                    "offset": (64, 10),
-                    "size": 450 * 0.95,
-                    "frame_delay": 5,
-                },
-                "stop": {
-                    "offset": (52, 12),
-                    "size": 450 * 0.95,
-                    "frame_delay": 10,
-                },
-                "cut_engine": {
-                    "offset": (113, 55),
-                    "size": 570 * 0.95,
-                    "frame_delay": 7,
-                },
-                "start_engine": {
-                    "offset": (43, 3),
-                    "size": 430 * 0.95,
-                    "frame_delay": 5,
-                },
-                "set_brakes": {
-                    "offset": (27, 2),
-                    "size": 450 * 0.95,
-                    "frame_delay": 10,
-                },
-                "chocks_inserted": {
-                    "offset": (38, -7),
-                    "size": 430 * 0.92,
-                    "frame_delay": 7,
-                },
-                "all_clear": {
-                    "offset": (44, 0),
-                    "size": 430 * 0.95,
-                    "frame_delay": 10,
-                },
+                "straight_ahead": {"offset": (64, 10), "size": 450 * 0.95, "frame_delay": 5},
+                "turn_left": {"offset": (43, 10), "size": 450 * 0.95, "frame_delay": 5},
+                "turn_right": {"offset": (64, 10), "size": 450 * 0.95, "frame_delay": 5},
+                "stop": {"offset": (52, 12), "size": 450 * 0.95, "frame_delay": 10},
+                "cut_engine": {"offset": (113, 55), "size": 570 * 0.95, "frame_delay": 7},
+                "start_engine": {"offset": (43, 3), "size": 430 * 0.95, "frame_delay": 5},
+                "set_brakes": {"offset": (27, 2), "size": 450 * 0.95, "frame_delay": 10},
+                "chocks_inserted": {"offset": (38, -7), "size": 430 * 0.92, "frame_delay": 7},
+                "all_clear": {"offset": (44, 0), "size": 430 * 0.95, "frame_delay": 10},
             }
 
             self.actions = [
@@ -237,12 +225,9 @@ class Game:
                     ((x - x_offset) * self.scale, (y - y_offset) * self.scale)
                 )
 
-            # Pilot's POV text
             small_size = int(16 * self.scale)
             font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
             self.pilots_pov_text = font_small.render("From Pilot's Point of View", True, (0, 0, 0))
-
-            # Anchor to top-right of left panel
             self.pilots_pov_rect = self.pilots_pov_text.get_rect()
             self.pilots_pov_rect.topleft = (self.lp_top_rect.left + 2, self.lp_top_rect.bottom + 2)
 
@@ -286,21 +271,15 @@ class Game:
 
         def setup_progressbar():
             num_segments = 9
-            bar_width = int(300 * self.scale)   # total width of the bar
-            bar_height = int(15 * self.scale)   # height of each rectangle
-            gap = int(1 * self.scale)           # spacing between rectangles
+            bar_width = int(300 * self.scale)
+            bar_height = int(15 * self.scale)
+            gap = int(1 * self.scale)
 
-            # Calculate the total width including gaps
             total_width = (num_segments * bar_width // num_segments) + (gap * (num_segments - 1))
-
-            # Center horizontally in bottom left panel (lp_bottom_rect)
             start_x = self.lp_bottom_rect.centerx - total_width // 2
             y = self.lp_bottom_rect.y + int(30 * self.scale)
 
-            # Each segment width
             segment_width = bar_width // num_segments
-
-            # Create rectangles
             self.progress_rects = []
             for i in range(num_segments):
                 rect = pygame.Rect(
@@ -311,7 +290,6 @@ class Game:
                 )
                 self.progress_rects.append(rect)
 
-            # Font for progress text
             font_size = int(18 * self.scale)
             self.progress_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
             self.progress_text_pos = (self.progress_rects[0].x + int(42 * self.scale), y - int(8 * self.scale))
@@ -331,22 +309,16 @@ class Game:
                 else:
                     print(f"[Bookends] Missing: {filename}")
 
-        # Execute setup routines
         setup_layout()
         setup_prediction_text()
-
         setup_bookend_buttons()
         self.setup_visibility_buttons()
-
         load_guide_videos()
-
         load_detection_audio()
         load_instruction_audio()
         load_chockesinserted_video()
         load_bookends_audio()
-
         self.setup_visual_instruction_text(self.instruction)
-
         setup_progressbar()
 
     def setup_visibility_buttons(self):
@@ -367,23 +339,18 @@ class Game:
         self.visibility_button = [False, True, surface, text_pos, btn_rect]
 
     def setup_visual_instruction_text(self, instruction):
-        # Sizes relative to lp_top_rect
         small_size = int(self.lp_top_rect.height * 0.35)
         big_size = int(self.lp_top_rect.height * 0.75)
 
-        # Fonts
         small_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
         big_font = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_size)
 
-        # Render "INSTRUCTIONS"
         title_text = small_font.render("INSTRUCTIONS:", True, (0, 0, 0))
         title_rect = title_text.get_rect()
 
-        # Render instruction (e.g. "Straight Ahead")
         instruction_text = big_font.render(instruction.upper().replace("_", " "), True, (0, 0, 0))
         instruction_rect = instruction_text.get_rect()
 
-        # Positioning
         total_height = title_rect.height + instruction_rect.height
         start_y = self.lp_top_rect.centery - total_height // 2
 
@@ -399,7 +366,54 @@ class Game:
             start_y + title_rect.height
         )
 
-    # Update
+    # ===== Detection & Scoring Utilities =====
+    @staticmethod
+    def _clamp(x, lo=0.0, hi=100.0):
+        return max(lo, min(hi, x))
+
+    def _mark_prompt(self):
+        self.t_prompt = time.perf_counter()
+        self.accept_counter = 0
+        self.accepted_for_action = False
+        self.signal_detected = False
+
+    def _maybe_accept_current(self):
+        if not self.training_started:
+            return
+        if self.current_action >= len(self.actions):
+            return
+        required = self.actions[self.current_action]
+
+        # Gate by confidence and label
+        if self.signal == required and self.confidence >= self.THRESHOLD:
+            self.accept_counter += 1
+        else:
+            self.accept_counter = 0
+
+        if (not self.accepted_for_action) and (self.accept_counter >= self.ACCEPT_N):
+            # Accept this detection
+            t_correct = time.perf_counter()
+            if self.t_prompt is None:
+                self.t_prompt = t_correct  # fallback guard
+            latency = max(0.0, t_correct - self.t_prompt)
+            latency = min(latency, self.TMAX)
+            score = 100.0 - (self.PENALTY_RATE * latency)
+            score = self._clamp(score)
+            label = pretty_label(required)
+            self.scores[label] = score
+
+            # Side effects used by existing flow
+            self.accepted_for_action = True
+            self.signal_detected = True
+
+            # Special case video popup
+            if required == "chocks_inserted":
+                self.play_chocksinserted_video(get_pygame_window_pos())
+
+            # Play detection audio
+            self.play_detection_audio()
+
+    # ===== Update / Inference =====
     def update_frame(self):
         ret, frame = self.cap.read()
         if not ret:
@@ -423,7 +437,7 @@ class Game:
         if len(self.sequence) > self.SEQUENCE_LENGTH:
             self.sequence.pop(0)
 
-        # Default signal
+        # Heuristic overrides for two gestures (sets 100% confidence)
         signal = ""
         if results.pose_landmarks:
             lm = results.pose_landmarks.landmark
@@ -447,16 +461,18 @@ class Game:
                 self.confidence = 1.0
                 self.update_prediction_text()
 
-        # Prediction
+        # Model prediction if no heuristic match
         if signal == "" and len(self.sequence) == self.SEQUENCE_LENGTH:
             input_seq = np.expand_dims(np.array(self.sequence), axis=0)  # shape: (1, 90, 99)
             probs = self.model.predict(input_seq, verbose=0)[0]
             max_idx = np.argmax(probs)
-            self.confidence = probs[max_idx]
-
+            self.confidence = float(probs[max_idx])
             if self.confidence > self.THRESHOLD:
                 self.signal = self.ACTIONS[max_idx]
                 self.update_prediction_text()
+
+        # Try to accept current gesture and score it
+        self._maybe_accept_current()
 
         # Convert for Pygame (after drawing)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -473,16 +489,13 @@ class Game:
         big_size = int(self.rp_top_rect.height * 0.525)
         font_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_size)
 
-        # Re-render dynamic values
         formatted_signal = self.signal.replace("_", " ").upper()
         value_left = font_big.render(formatted_signal, True, (0, 0, 0))
         value_right = font_big.render(f"{self.confidence * 100:.0f}%", True, (0, 0, 0))
 
-        # Update stored surfaces
         self.predicted_label_surface = value_left
         self.predicted_probability_surface = value_right
 
-        # Update their positions in the main surfaces list
         spacing = int(2 * self.scale)
         small_size = int(self.rp_top_rect.height * 0.3)
         font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
@@ -494,11 +507,10 @@ class Game:
         left_x = self.rp_top_rect.left + margin
         right_x = self.rp_top_rect.right - margin
 
-        # Update only the value parts (indexes 1 and 3)
         self.prediction_text_surfaces[1] = (value_left, (left_x, y_start + label_left_rect.height + spacing))
         self.prediction_text_surfaces[3] = (value_right, (right_x - value_right.get_width(), y_start + label_right_rect.height + spacing))
 
-    # Draw
+    # ===== Draw =====
     def draw(self):
         win.fill((255, 255, 255)) 
         border_width = max(1, round(2 * self.scale))
@@ -516,7 +528,6 @@ class Game:
                 text_rect = text_surface.get_rect(center=self.progress_text_pos)
                 win.blit(text_surface, text_rect)
 
-                # Draw Pilot's POV text
                 if self.current_action == 2 or self.current_action == 3:
                     win.blit(self.pilots_pov_text, self.pilots_pov_rect)
 
@@ -526,13 +537,11 @@ class Game:
             pygame.draw.rect(win, (192, 192, 192), self.rp_top_rect)
             pygame.draw.rect(win, (119, 163, 200), self.lp_top_rect)
 
-            # Draw text
             for surface, pos in self.prediction_text_surfaces:
                 win.blit(surface, pos)
             win.blit(self.visinstr_title_text, self.visinstr_title_pos)
             win.blit(self.visinstr_instr_text, self.visinstr_instr_pos)
 
-            # Draw buttons
             for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
                 fill = (192, 192, 192) if is_hovered and is_open else \
                     (240, 240, 240) if is_open else (132, 132, 132)
@@ -554,23 +563,20 @@ class Game:
 
         frames, pos = self.guide_videos[action]
 
-        # Init counters
         if action not in self.guide_frame_counters:
             self.guide_frame_counters[action] = 0
             self.guide_frame_timers[action] = 0
 
         idx = self.guide_frame_counters[action]
 
-        # Draw current frame
         screen.blit(frames[idx], pos)
 
-        # Update timer and frame index
         self.guide_frame_timers[action] += 1
         if self.guide_frame_timers[action] >= frame_delay:
             self.guide_frame_counters[action] = (idx + 1) % len(frames)
             self.guide_frame_timers[action] = 0
 
-    # Audio
+    # ===== Audio =====
     def play_detection_audio(self):
         action = self.actions[self.current_action]
         if action in self.detection_audio:
@@ -597,11 +603,10 @@ class Game:
     def stop_current_audio(self):
         pygame.mixer.stop()
 
-    # Videos
+    # ===== Videos =====
     def play_introduction_video(self):
         self.play_bookends_audio("introduction")
 
-        # Resolve path from load_bookends(); fall back to resources if needed
         intro_path = getattr(self, "introvid_path", None)
         if not intro_path or not os.path.exists(intro_path):
             intro_path = os.path.join(resources_path, "bookends", "introduction.mp4")
@@ -614,7 +619,6 @@ class Game:
             print("[Bookends] Failed to open introduction.mp4")
             return
 
-        # Use video FPS (fallback 30)
         fps = 30
         clock = pygame.time.Clock()
 
@@ -626,7 +630,6 @@ class Game:
                     pygame.quit()
                     sys.exit()
                 elif event.type == pygame.VIDEORESIZE:
-                    # Resize window dynamically
                     new_width = max(640, event.w)
                     new_height = max(360, event.h)
                     new_size = (new_width, new_height)
@@ -644,19 +647,15 @@ class Game:
                         
             ret, frame = cap.read()
             if not ret:
-                break  # End of video
+                break
 
-            # Convert OpenCV frame → Pygame surface
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame = cv2.flip(frame, 1)
-            frame = np.rot90(frame)  # Keep only if orientation needs correction
+            frame = np.rot90(frame)
             surface = pygame.surfarray.make_surface(frame)
 
-            # Scale to fill entire window
             win_size = win.get_size()
             scaled = pygame.transform.smoothscale(surface, win_size)
-
-            # Draw
             win.blit(scaled, (0, 0))
             pygame.display.update()
 
@@ -675,38 +674,27 @@ class Game:
             print(f"[Chocks Inserted] Failed to open video: {self.chocks_inserted_video}")
             return
 
-        # Get FPS to control playback speed (fall back to 30 if missing)
         fps = cap.get(cv2.CAP_PROP_FPS)
         fps = int(fps) if fps and fps > 0 else 30
         delay = int(1000 / fps)
 
-        # Get original video resolution
         vid_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         vid_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        # Compute aspect ratio
         aspect_ratio = vid_width / vid_height if vid_height != 0 else 1.0
 
-        # Get actual window size from your Pygame window
         win_width, win_height = self.win_size  
-
-        # Scale video so that its height <= window height
         scaled_height = win_height
         scaled_width = int(scaled_height * aspect_ratio)
 
-        # If scaled width is larger than window width, clamp to width
         if scaled_width > win_width:
             scaled_width = win_width
             scaled_height = int(scaled_width / aspect_ratio)
 
-        # Create popup window scaled to fit inside actual window
         cv2.namedWindow("Chocks Inserted", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Chocks Inserted", scaled_width, scaled_height)
 
-        # Compute safe position: left of Pygame window, but never off-screen
         x = max(0, pygamewin_pos[0] - scaled_width - 5)
         y = pygamewin_pos[1]
-
         cv2.moveWindow("Chocks Inserted", x, y)
 
         while cap.isOpened():
@@ -715,15 +703,13 @@ class Game:
                 break
 
             cv2.imshow("Chocks Inserted", frame)
-
-            # Just wait for the duration; ignore user input
             if cv2.waitKey(delay) == -1:
                 pass
 
         cap.release()
         cv2.destroyWindow("Chocks Inserted")
 
-    # Buttons
+    # ===== Buttons =====
     def button_over_detection(self, mouse_pos):
         for button in self.buttons.values():
             button[0] = button[4].collidepoint(mouse_pos)
@@ -740,20 +726,18 @@ class Game:
         if is_open and btn_rect.collidepoint(mouse_pos):
             return "VISIBILITY"
 
-    # Quit
+    # ===== Quit =====
     def release(self):
         self.cap.release()
 
 
 class GameOver:
     def __init__(self, win_size, signal_scores):
-        self.signal_scores = signal_scores
-
+        self.signal_scores = signal_scores  # {Pretty Label: score}
         self.init(win_size)
     
     def init(self, win_size):
         self.init_scale(win_size)
-
         self.win_size = win_size
 
         self.font = pygame.font.SysFont("Franklin Gothic Medium Condensed", int(26 * self.scale))
@@ -763,9 +747,9 @@ class GameOver:
         self.border_color = (0, 0, 0)
 
         self.prepare_text()
-        self.measure_button_dimensions()  # New
-        self.calculate_popup_rect()       # Now we can safely calculate height
-        self.prepare_buttons()            # Now we can safely position buttons
+        self.measure_button_dimensions()
+        self.calculate_popup_rect()
+        self.prepare_buttons()
 
     def init_scale(self, win_size):
         base_width, base_height = 640, 360
@@ -775,29 +759,62 @@ class GameOver:
 
     def prepare_text(self):
         self.text_surfaces = []
+
+        ordered_labels = [
+            "Start Engine", "Straight Ahead", "Turn Left", "Turn Right",
+            "Set Brakes", "Chocks Inserted", "Cut Engines", "All Clear"
+        ]
         total_score = 0
+        count = 0
 
+        # Render rows in consistent order; skip missing ones gracefully
+        for label in ordered_labels:
+            if label in self.signal_scores:
+                score = float(self.signal_scores[label])
+                total_score += score
+                count += 1
+                text = f"{label}: {int(round(score))}%"
+                surface = self.font.render(text, True, (0, 0, 0))
+                self.text_surfaces.append(surface)
+
+        # Include any extra labels not in the standard ordering
         for label, score in self.signal_scores.items():
-            total_score += score
-            text = f"{label} . . . . . {int(score)}%"
-            surface = self.font.render(text, True, (0, 0, 0))
-            self.text_surfaces.append(surface)
+            if label not in ordered_labels:
+                total_score += float(score)
+                count += 1
+                text = f"{label}: {int(round(score))}%"
+                surface = self.font.render(text, True, (0, 0, 0))
+                self.text_surfaces.append(surface)
 
-        self.overall_score = total_score / len(self.signal_scores)
-        self.overall_score =50
-        self.status = "UNSATISFACTORY" 
-        if self.overall_score >= 90:
-            self.status = "EXCELLENT"
-        elif self.overall_score >= 75:
-            self.status = "GOOD"
-        elif self.overall_score >= 50:
-            self.status = "NEEDS IMPROVEMENT"
+        if count == 0:
+            self.overall_pct = 0.0
+        else:
+            self.overall_pct = total_score / count
 
+        overall_5 = round((self.overall_pct / 100.0) * 5.0, 2)
         self.overall_surface = self.title_font.render(
-            f"OVERALL SCORE: {round(self.overall_score * 5, 2)} / 5.0", True, (0, 0, 0)
+            f"OVERALL SCORE: {overall_5} / 5.0", True, (0, 0, 0)
         )
+
+        # Tiered status
+        if overall_5 >= 4.5:
+            status = "EXCELLENT"
+            color = (0, 128, 0)
+        elif overall_5 >= 3.75:
+            status = "GOOD"
+            color = (0, 128, 0)
+        elif overall_5 >= 3.0:
+            status = "PASSED"
+            color = (0, 128, 0)
+        elif overall_5 >= 2.5:
+            status = "NEEDS IMPROVEMENT"
+            color = (200, 140, 0)
+        else:
+            status = "UNSATISFACTORY"
+            color = (200, 0, 0)
+
         self.status_surface = self.font.render(
-            f"Status: {self.status}", True, (0, 128, 0) if self.status == "PASSED" else (200, 0, 0)
+            f"Status: {status}", True, color
         )
 
     def prepare_buttons(self):
@@ -830,13 +847,6 @@ class GameOver:
         self.button_surfaces = list(zip(labels, surfaces, rects))
 
     def calculate_popup_rect(self):
-        # spacing = int(30 * self.scale)
-        # padding_top = int(5 * self.scale)
-        # padding_bottom = int(5 * self.scale)
-        # extra_spacing = int(25 * self.scale)
-
-        # num_lines = len(self.text_surfaces) + 2  # main lines + overall + status
-        # total_text_height = (num_lines * spacing) + extra_spacing
         self.height = int((self.win_size[1]))
         self.width = int((self.win_size[0] // 2))
 
@@ -867,8 +877,7 @@ class GameOver:
         cursor_y += spacing
         x = self.popup_rect.centerx - self.status_surface.get_width() // 2
         win.blit(self.status_surface, (x, cursor_y))
-
-        # Draw buttons
+  
         border_width = max(1, round(2 * self.scale))
         for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
             fill = (192, 192, 192) if is_hovered and is_open else \
@@ -889,18 +898,6 @@ class GameOver:
 
 def game_loop():
     game.play_introduction_video()
-    scores = {
-        "Start Engine": 100,
-        "Straight Ahead": 100,
-        "Turn Left": 100,
-        "Turn Right": 100,
-        "Set Brakes": 100,
-        "Chocks Inserted": 100,
-        "Cut Engines": 100,
-        "All Clear": 100
-    }
-    gameover = GameOver(win_size, scores)
-    game.assessment_stage = True
 
     run = True
     while run:
@@ -918,9 +915,6 @@ def game_loop():
                 game.init_opencv(new_size)
                 game.init_panels(new_size)
 
-                gameover.init_scale(new_size)
-                gameover.init(new_size)
-
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
                 if not game.assessment_stage:
@@ -930,6 +924,9 @@ def game_loop():
                         game.instruction = game.actions[game.current_action]
                         game.setup_visual_instruction_text(game.instruction)
                         game.play_instruction_audio()
+
+                        # mark timing for scoring
+                        game._mark_prompt()
 
                         game.buttons["START"][1] = False
                         game.buttons["END TRAINING"][1] = True
@@ -951,7 +948,6 @@ def game_loop():
 
                     elif btn_label == "VISIBILITY":
                         game.visibility_toggle = "+" if game.visibility_toggle == "X" else "X"
-
                         game.setup_visibility_buttons()
                 else:
                     btn_label = gameover.button_down_detection(mouse_pos)
@@ -959,25 +955,17 @@ def game_loop():
                         run = False
 
                     elif btn_label == "Retake Mission":
-                        # 1) Re-init the Game object to clear out all state:
+                        # Re-init Game
                         game.__init__(win_size)
-                        
-                        # 2) Reset any assessment flags
                         game.assessment_stage = False
                         game.training_started = False
                         game.signal_detected = False
-                        
-                        # 3) Reset UI state to show only the START button
                         game.buttons["START"][1] = False
                         game.buttons["END TRAINING"][1] = False
                         game.button_states["START"] = False
                         game.button_states["END TRAINING"] = False
-                        
-                        # 4) Reset the “instruction” text to blank (or “None”)
                         game.instruction = "None"
                         game.setup_visual_instruction_text(game.instruction)
-                        
-                        # 5) (Optionally) play an intro bookend again
                         game.play_introduction_video()
 
             elif event.type == pygame.KEYDOWN:
@@ -992,36 +980,43 @@ def game_loop():
                 if event.key == pygame.K_w:  # !!!
                     game.current_action += 1
                     if game.current_action >= len(game.actions):
-                        gameover = GameOver(win_size, scores)
+                        print(game.scores)
+                        gameover = GameOver(win_size, game.scores)
                         game.assessment_stage = True
                         game.training_started = False
                         print("ASSESSMENT ENDED")
                     else:
+                        print(game.scores)
                         game.instruction = game.actions[game.current_action]
                         game.setup_visual_instruction_text(game.instruction)
                         game.play_instruction_audio()
                         game.signal_detected = False
 
         if game.training_started:
-            if not pygame.mixer.get_busy() and not game.signal_detected:
-                if game.signal == game.actions[game.current_action]:
-                    if game.current_action == 6:  # chocks inserted
-                        game.play_chocksinserted_video(get_pygame_window_pos())
-                    game.play_detection_audio()
-                    game.signal_detected = True
+            if not pygame.mixer.get_busy():
+                if not game.signal_detected:
+                    if game.signal == game.actions[game.current_action]:
+                        if game.current_action == 6:  # chocks inserted
+                            game.play_chocksinserted_video(get_pygame_window_pos())
+                        game.play_detection_audio()
+                        game.signal_detected = True
 
-            if not pygame.mixer.get_busy() and game.signal_detected:
-                game.current_action += 1
-                if game.current_action >= len(game.actions):
-                    gameover = GameOver(win_size, scores)
-                    game.assessment_stage = True
-                    game.training_started = False
-                    print("ASSESSMENT ENDED")
-                else:
-                    game.instruction = game.actions[game.current_action]
-                    game.setup_visual_instruction_text(game.instruction)
-                    game.play_instruction_audio()
-                    game.signal_detected = False
+                if game.signal_detected:
+                    game.current_action += 1
+                    game.t_prompt = time.perf_counter()
+                    game.accepted_for_action = False
+                    if game.current_action >= len(game.actions):
+                        print(game.scores)
+                        gameover = GameOver(win_size, game.scores)
+                        game.assessment_stage = True
+                        game.training_started = False
+                        print("ASSESSMENT ENDED")
+                    else:
+                        print(game.scores)
+                        game.instruction = game.actions[game.current_action]
+                        game.setup_visual_instruction_text(game.instruction)
+                        game.play_instruction_audio()
+                        game.signal_detected = False
         else:
             if not pygame.mixer.get_busy():
                 game.buttons["START"][1] = True
