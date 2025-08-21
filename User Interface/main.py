@@ -54,7 +54,7 @@ def send_command(command):
         print("Check that you are connected to the ESP8266's Wi-Fi network.")
 
 
-class Menu: 
+class Menu:     
     def __init__(self, win_size):
         self.popup_active = False
         self.game_loading = False
@@ -1313,10 +1313,12 @@ def game_loop():
                         game.button_states["END TRAINING"] = False
 
                 if event.key == pygame.K_w:
-                    game.current_action += 1
                     command = command_converter(game.actions[game.current_action])
                     if command:
-                        send_command()
+                        send_command(command)
+                    time.sleep(3)
+
+                    game.current_action += 1
 
                     if game.current_action >= len(game.actions):
                         gameover = GameOver(win_size, game.scores)
@@ -1332,11 +1334,13 @@ def game_loop():
             if game.training_started:
                 if not pygame.mixer.get_busy():
                     if game.signal_detected:
-                        game.current_action += 1
-                        game.accepted_for_action = False
                         command = command_converter(game.actions[game.current_action])
                         if command:
-                            send_command()
+                            send_command(command)
+                            print(command)
+
+                        game.current_action += 1
+                        game.accepted_for_action = False
                         if game.current_action >= len(game.actions):
                             game.assessment_stage = True
                             game.training_started = False

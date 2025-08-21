@@ -1,10 +1,52 @@
+import csv
 import ctypes
+from datetime import datetime
 import numpy as np
 import os
 import pygame
 import requests
 import sys
 import time
+
+
+def save_scores_to_csv(scores, overall_score, status):
+    filename = f"Ground Aircraft Marshalling Simulator/scores.csv"
+    file_exists = os.path.isfile(filename)
+
+    # Prepare row data
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    row = [now] + [scores.get(key, "") for key in scores.keys()] + [overall_score] + [status]
+
+    # Write header if file does not exist
+    with open(filename, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            header = ["Date & Time"] + list(scores.keys()) + ["Overall Score"] + ["Status"]
+            writer.writerow(header)
+        writer.writerow(row)
+
+
+def get_score(count, total_score):
+    if count == 0:
+        overall_pct = 0
+    else:
+        overall_pct = int(round(total_score / count, 0))
+
+    # Tiered status
+    if overall_pct >= 90:
+        status = "EXCELLENT"
+        color = (0, 128, 0)
+    elif overall_pct >= 75:
+        status = "GOOD"
+        color = (0, 128, 0)
+    elif overall_pct >= 50:
+        status = "NEEDS IMPROVEMENT"
+        color = (200, 140, 0)
+    else:
+        status = "UNSATISFACTORY"
+        color = (200, 0, 0)
+
+    return overall_pct, status, color
 
 
 def get_pygame_window_pos():
@@ -289,7 +331,10 @@ class Game:
         "straight_ahead", "turn_left", "turn_right"
     ]
     # Model / detection
-    MODEL_PATH      = r"Ground Aircraft Marshalling Simulator/model.h5"
+    try:
+        MODEL_PATH = f"Ground Aircraft Marshalling Simulator/model.h5"
+    except FileNotFoundError:
+        MODEL_PATH = f"model.h5"
     SEQUENCE_LENGTH = 90
     THRESHOLD       = 0.4
 
@@ -299,6 +344,7 @@ class Game:
     ACCEPT_N        = 5     # consecutive frames required to accept a detection
 
     def __init__(self, win_size):
+
         self.cap = cv2.VideoCapture(0)
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose()
@@ -1053,29 +1099,13 @@ class GameOver:
                 surface = self.font.render(text, True, (0, 0, 0))
                 self.text_surfaces.append(surface)
 
-        if count == 0:
-            self.overall_pct = 0
-        else:
-            self.overall_pct = int(round(total_score / count, 0))
+        overall_pct, status, color = get_score(count, total_score)
+        save_scores_to_csv(self.signal_scores, overall_pct, status)
 
+        self.overall_pct = overall_pct
         self.overall_surface = self.title_font.render(
             f"OVERALL SCORE: {self.overall_pct}%", True, (0, 0, 0)
         )
-
-        # Tiered status
-        if self.overall_pct >= 90:
-            status = "EXCELLENT"
-            color = (0, 128, 0)
-        elif self.overall_pct >= 75:
-            status = "GOOD"
-            color = (0, 128, 0)
-        elif self.overall_pct >= 50:
-            status = "NEEDS IMPROVEMENT"
-            color = (200, 140, 0)
-        else:
-            status = "UNSATISFACTORY"
-            color = (200, 0, 0)
-
         self.status_surface = self.font.render(
             f"Status: {status}", True, color
         )
@@ -1314,9 +1344,12 @@ def game_loop():
 
                 if event.key == pygame.K_w:
                     game.current_action += 1
-                    command = command_converter(game.actions[game.current_action])
-                    if command:
-                        send_command()
+                    try:
+                        command = command_converter(game.actions[game.current_action])
+                        if command:
+                            send_command(command)
+                    except IndexError:
+                        pass
 
                     if game.current_action >= len(game.actions):
                         gameover = GameOver(win_size, game.scores)
@@ -1334,15 +1367,21 @@ def game_loop():
                     if game.signal_detected:
                         game.current_action += 1
                         game.accepted_for_action = False
-                        command = command_converter(game.actions[game.current_action])
-                        if command:
-                            send_command()
+
+                        try:
+                            command = command_converter(game.actions[game.current_action])
+                            if command:
+                                send_command(command)
+                        except IndexError:
+                            pass
+
                         if game.current_action >= len(game.actions):
                             game.assessment_stage = True
                             game.training_started = False
 
                             current_winsize = pygame.display.get_surface().get_size()
                             gameover = GameOver(current_winsize, game.scores)
+
                         else:
                             game.instruction = game.actions[game.current_action]
                             game.setup_visual_instruction_text(game.instruction)
