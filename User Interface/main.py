@@ -1,7 +1,4 @@
 import ctypes
-import cv2
-from keras._tf_keras.keras.models import load_model
-import mediapipe as mp
 import numpy as np
 import os
 import pygame
@@ -276,8 +273,6 @@ class Game:
     ACCEPT_N        = 5     # consecutive frames required to accept a detection
 
     def __init__(self, win_size):
-        self.win_size = win_size
-
         self.cap = cv2.VideoCapture(0)
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose()
@@ -410,7 +405,7 @@ class Game:
                 x = self.rp_bottom_rect.left + int(20 * self.scale) if i == 0 else self.rp_bottom_rect.right - width - int(20 * self.scale)
                 btn_rect = pygame.Rect(x, y, width, height)
                 text_pos = (x + (width - rect.width) // 2, y + (height - rect.height) // 2)
-                self.buttons[label] = [False, False, surface, text_pos, btn_rect]
+                self.buttons[label] = [False, False, surface, text_pos, btn_rect]  # is_hovered, is_open, text, text_pos, btn_rect
 
         def load_guide_videos():
             self.guide_position = [0, 0]
@@ -917,12 +912,12 @@ class Game:
         fps = cap.get(cv2.CAP_PROP_FPS)
         fps = int(fps) if fps and fps > 0 else 30
         delay = int(1000 / fps)
-
+        
         vid_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         vid_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         aspect_ratio = vid_width / vid_height if vid_height != 0 else 1.0
 
-        win_width, win_height = self.win_size  
+        win_width, win_height = win.get_size()
         scaled_height = win_height
         scaled_width = int(scaled_height * aspect_ratio)
 
@@ -954,6 +949,9 @@ class Game:
         for button in self.buttons.values():
             button[0] = button[4].collidepoint(mouse_pos)
 
+        self.visibilitybtn_over_detection(mouse_pos)
+
+    def visibilitybtn_over_detection(self, mouse_pos):
         button = self.visibility_button
         button[0] = button[4].collidepoint(mouse_pos)
 
@@ -962,6 +960,9 @@ class Game:
             if is_open and btn_rect.collidepoint(mouse_pos):
                 return label
             
+        self.visibilitybtn_down_detection(mouse_pos)
+
+    def visibilitybtn_down_detection(self, mouse_pos):
         _, is_open, *_, btn_rect = self.visibility_button
         if is_open and btn_rect.collidepoint(mouse_pos):
             return "VISIBILITY"
@@ -1186,6 +1187,11 @@ def menu_loop():
         menu.draw(win)
 
         if menu.game_loading and not menu.game_initialized:
+            global cv2, load_model, mp
+            import cv2
+            from keras._tf_keras.keras.models import load_model
+            import mediapipe as mp
+
             current_winsize = pygame.display.get_surface().get_size()
             game = Game(current_winsize)
             menu.game_initialized = True
@@ -1252,8 +1258,10 @@ def game_loop():
                         run = False
 
                     elif btn_label == "Retake Mission":
+                        current_winsize = pygame.display.get_surface().get_size()
+
                         # Re-init Game
-                        game.__init__(win_size)
+                        game.__init__(current_winsize)
                         game.assessment_stage = False
                         game.training_started = False
                         game.signal_detected = False
@@ -1263,9 +1271,13 @@ def game_loop():
                         game.button_states["END TRAINING"] = False
                         game.instruction = "None"
                         game.setup_visual_instruction_text(game.instruction)
-                        game.play_introduction_video()
 
-            elif event.type == pygame.KEYDOWN:
+                    btn_label = game.visibilitybtn_down_detection(mouse_pos)
+                    if btn_label == "VISIBILITY":
+                        game.visibility_toggle = "+" if game.visibility_toggle == "X" else "X"
+                        game.setup_visibility_buttons()
+
+            elif event.type == pygame.KEYDOWN:  # !!!
                 if event.key == pygame.K_SPACE:
                     game.stop_current_audio()
                     if not game.button_states["START"] and not game.training_started:
@@ -1274,36 +1286,56 @@ def game_loop():
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
 
-        if game.training_started:
-            if not pygame.mixer.get_busy():
-                if game.signal_detected:
+                if event.key == pygame.K_w:
                     game.current_action += 1
-                    game.accepted_for_action = False
                     if game.current_action >= len(game.actions):
-                        print(game.scores)
                         gameover = GameOver(win_size, game.scores)
                         game.assessment_stage = True
                         game.training_started = False
-                        print("ASSESSMENT ENDED")
                     else:
-                        print(game.scores)
                         game.instruction = game.actions[game.current_action]
                         game.setup_visual_instruction_text(game.instruction)
                         game.play_instruction_audio()
                         game.signal_detected = False
-        else:
-            if not pygame.mixer.get_busy():
-                game.buttons["START"][1] = True
-                game.button_states["START"] = True
+
+        if not game.assessment_stage:
+            if game.training_started:
+                if not pygame.mixer.get_busy():
+                    if game.signal_detected:
+                        game.current_action += 1
+                        game.accepted_for_action = False
+                        if game.current_action >= len(game.actions):
+                            game.assessment_stage = True
+                            game.training_started = False
+
+                            current_winsize = pygame.display.get_surface().get_size()
+                            gameover = GameOver(current_winsize, game.scores)
+                        else:
+                            game.instruction = game.actions[game.current_action]
+                            game.setup_visual_instruction_text(game.instruction)
+                            game.play_instruction_audio()
+                            game.signal_detected = False
+            else:
+                if not pygame.mixer.get_busy():
+                    game.buttons["START"][1] = True
+                    game.button_states["START"] = True
 
         game.update_frame()
         game.draw()
+
         mouse_pos = pygame.mouse.get_pos()
         if not game.assessment_stage:
             game.button_over_detection(mouse_pos)
         else:
+            game.buttons["START"][1] = False
+            game.buttons["END TRAINING"][1] = False
+            game.button_states["START"] = False
+            game.button_states["END TRAINING"] = False
+
+            game.visibilitybtn_over_detection(mouse_pos)
             gameover.button_over_detection(mouse_pos)
             gameover.draw(win)
+
         pygame.display.update()
 
     game.release()
