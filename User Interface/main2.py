@@ -22,7 +22,7 @@ def pretty_label(key: str) -> str:
         "straight_ahead": "Straight Ahead",
         "turn_left": "Turn Left",
         "turn_right": "Turn Right",
-        "stop": "Set Brakes",
+        "stop": "Stop",
         "set_brakes": "Set Brakes",
         "chocks_inserted": "Chocks Inserted",
         "cut_engine": "Cut Engines",
@@ -73,6 +73,7 @@ class Game:
         # Scoring state
         self.scores = {}  # {Pretty Label: score (0..100)}
         self.t_prompt = None
+        self.t_prompt_end = None
         self.accept_counter = 0
         self.accepted_for_action = False
 
@@ -471,8 +472,15 @@ class Game:
                 self.signal = self.ACTIONS[max_idx]
                 self.update_prediction_text()
 
-        # Try to accept current gesture and score it
-        self._maybe_accept_current()
+        # Open the detection window only after instruction audio ends
+        if self.training_started and (not pygame.mixer.get_busy()) and (not self.signal_detected):
+            # First frame after audio finished: set the start-of-latency mark
+            if self.t_prompt is None:
+                self.t_prompt = time.perf_counter()
+                self.accept_counter = 0
+                self.accepted_for_action = False
+            # Now we may try to accept the current gesture
+            self._maybe_accept_current()
 
         # Convert for Pygame (after drawing)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -589,7 +597,14 @@ class Game:
         action = self.actions[self.current_action]
         if action in self.instruction_audio:
             pygame.mixer.stop()
-            self.instruction_audio[action].play()
+            snd = self.instruction_audio[action]
+            snd.play()
+            # latency should start AFTER the audio ends
+            self.t_prompt = None
+            try:
+                self.t_prompt_end = time.perf_counter() + float(snd.get_length())
+            except Exception:
+                self.t_prompt_end = None
         else:
             print(f"No instruction audio loaded for action '{action}'")
 
@@ -761,7 +776,7 @@ class GameOver:
         self.text_surfaces = []
 
         ordered_labels = [
-            "Start Engine", "Straight Ahead", "Turn Left", "Turn Right",
+            "Start Engine", "Straight Ahead", "Turn Left", "Turn Right", "Stop"
             "Set Brakes", "Chocks Inserted", "Cut Engines", "All Clear"
         ]
         total_score = 0
@@ -787,26 +802,22 @@ class GameOver:
                 self.text_surfaces.append(surface)
 
         if count == 0:
-            self.overall_pct = 0.0
+            self.overall_pct = 0
         else:
-            self.overall_pct = total_score / count
+            self.overall_pct = int(round(total_score / count, 0))
 
-        overall_5 = round((self.overall_pct / 100.0) * 5.0, 2)
         self.overall_surface = self.title_font.render(
-            f"OVERALL SCORE: {overall_5} / 5.0", True, (0, 0, 0)
+            f"OVERALL SCORE: {self.overall_pct}%", True, (0, 0, 0)
         )
 
         # Tiered status
-        if overall_5 >= 4.5:
+        if self.overall_pct >= 90:
             status = "EXCELLENT"
             color = (0, 128, 0)
-        elif overall_5 >= 3.75:
+        elif self.overall_pct >= 75:
             status = "GOOD"
             color = (0, 128, 0)
-        elif overall_5 >= 3.0:
-            status = "PASSED"
-            color = (0, 128, 0)
-        elif overall_5 >= 2.5:
+        elif self.overall_pct >= 50:
             status = "NEEDS IMPROVEMENT"
             color = (200, 140, 0)
         else:
@@ -860,8 +871,8 @@ class GameOver:
     def draw(self, win):
         pygame.draw.rect(win, self.bg_color, self.popup_rect)
 
-        spacing = int(30 * self.scale)
-        extra_spacing = int(5 * self.scale)
+        spacing = int(28 * self.scale)
+        extra_spacing = int(2 * self.scale)
 
         cursor_y = self.popup_rect.y + int(10 * self.scale)
 
@@ -925,9 +936,6 @@ def game_loop():
                         game.setup_visual_instruction_text(game.instruction)
                         game.play_instruction_audio()
 
-                        # mark timing for scoring
-                        game._mark_prompt()
-
                         game.buttons["START"][1] = False
                         game.buttons["END TRAINING"][1] = True
                         game.button_states["START"] = False
@@ -977,33 +985,26 @@ def game_loop():
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
 
-                if event.key == pygame.K_w:  # !!!
-                    game.current_action += 1
-                    if game.current_action >= len(game.actions):
-                        print(game.scores)
-                        gameover = GameOver(win_size, game.scores)
-                        game.assessment_stage = True
-                        game.training_started = False
-                        print("ASSESSMENT ENDED")
-                    else:
-                        print(game.scores)
-                        game.instruction = game.actions[game.current_action]
-                        game.setup_visual_instruction_text(game.instruction)
-                        game.play_instruction_audio()
-                        game.signal_detected = False
+                # if event.key == pygame.K_w:  # !!!
+                #     game.current_action += 1
+                #     game.accepted_for_action = False
+                #     if game.current_action >= len(game.actions):
+                #         print(game.scores)
+                #         gameover = GameOver(win_size, game.scores)
+                #         game.assessment_stage = True
+                #         game.training_started = False
+                #         print("ASSESSMENT ENDED")
+                #     else:
+                #         print(game.scores)
+                #         game.instruction = game.actions[game.current_action]
+                #         game.setup_visual_instruction_text(game.instruction)
+                #         game.play_instruction_audio()
+                #         game.signal_detected = False
 
         if game.training_started:
             if not pygame.mixer.get_busy():
-                if not game.signal_detected:
-                    if game.signal == game.actions[game.current_action]:
-                        if game.current_action == 6:  # chocks inserted
-                            game.play_chocksinserted_video(get_pygame_window_pos())
-                        game.play_detection_audio()
-                        game.signal_detected = True
-
                 if game.signal_detected:
                     game.current_action += 1
-                    game.t_prompt = time.perf_counter()
                     game.accepted_for_action = False
                     if game.current_action >= len(game.actions):
                         print(game.scores)
