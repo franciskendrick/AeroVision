@@ -43,7 +43,7 @@ class Game:
 
     # Scoring parameters (lead's formula)
     PENALTY_RATE    = 5.0   # percent per second
-    TMAX            = 20.0  # seconds; cap for TimeToCorrectError
+    TMAX            = 20.0  # seconds; cap for TimeToCorrectError; TimetocorrectMAX
     ACCEPT_N        = 5     # consecutive frames required to accept a detection
 
     def __init__(self, win_size):
@@ -67,11 +67,11 @@ class Game:
             "START": False
         }
         self.visibility_toggle = "X"
-        self.signal_detected = False  # accepted detection for current action
+        self.signal_detected = False
         self.assessment_stage = False
 
         # Scoring state
-        self.scores = {}  # {Pretty Label: score (0..100)}
+        self.scores = {}
         self.t_prompt = None
         self.t_prompt_end = None
         self.accept_counter = 0
@@ -88,7 +88,7 @@ class Game:
         self.scale = min(scale_w, scale_h)
 
     def init_opencv(self, win_size):
-        # Use a dummy frame to calculate aspect ratio
+        # Dummy frame to calculate aspect ratio
         ret, frame = self.cap.read()
         if not ret:
             print("Failed to read dummy frame for init.")
@@ -367,7 +367,7 @@ class Game:
             start_y + title_rect.height
         )
 
-    # ===== Detection & Scoring Utilities =====
+    # Detection & Scoring Utilities
     @staticmethod
     def _clamp(x, lo=0.0, hi=100.0):
         return max(lo, min(hi, x))
@@ -395,26 +395,24 @@ class Game:
             # Accept this detection
             t_correct = time.perf_counter()
             if self.t_prompt is None:
-                self.t_prompt = t_correct  # fallback guard
-            latency = max(0.0, t_correct - self.t_prompt)
-            latency = min(latency, self.TMAX)
-            score = 100.0 - (self.PENALTY_RATE * latency)
+                self.t_prompt = t_correct
+            time_to_correct = max(0.0, t_correct - self.t_prompt)
+            time_to_correct = min(time_to_correct, self.TMAX)
+            score = 100.0 - (self.PENALTY_RATE * time_to_correct)
             score = self._clamp(score)
             label = pretty_label(required)
             self.scores[label] = score
 
-            # Side effects used by existing flow
             self.accepted_for_action = True
             self.signal_detected = True
 
-            # Special case video popup
             if required == "chocks_inserted":
                 self.play_chocksinserted_video(get_pygame_window_pos())
 
             # Play detection audio
             self.play_detection_audio()
 
-    # ===== Update / Inference =====
+    # Update / Inference
     def update_frame(self):
         ret, frame = self.cap.read()
         if not ret:
@@ -438,7 +436,7 @@ class Game:
         if len(self.sequence) > self.SEQUENCE_LENGTH:
             self.sequence.pop(0)
 
-        # Heuristic overrides for two gestures (sets 100% confidence)
+        # Heuristic overrides for All Clear and Set Brakes (sets 100% confidence)
         signal = ""
         if results.pose_landmarks:
             lm = results.pose_landmarks.landmark
@@ -474,12 +472,11 @@ class Game:
 
         # Open the detection window only after instruction audio ends
         if self.training_started and (not pygame.mixer.get_busy()) and (not self.signal_detected):
-            # First frame after audio finished: set the start-of-latency mark
             if self.t_prompt is None:
                 self.t_prompt = time.perf_counter()
                 self.accept_counter = 0
                 self.accepted_for_action = False
-            # Now we may try to accept the current gesture
+
             self._maybe_accept_current()
 
         # Convert for Pygame (after drawing)
@@ -518,7 +515,7 @@ class Game:
         self.prediction_text_surfaces[1] = (value_left, (left_x, y_start + label_left_rect.height + spacing))
         self.prediction_text_surfaces[3] = (value_right, (right_x - value_right.get_width(), y_start + label_right_rect.height + spacing))
 
-    # ===== Draw =====
+    # Draw
     def draw(self):
         win.fill((255, 255, 255)) 
         border_width = max(1, round(2 * self.scale))
@@ -584,7 +581,7 @@ class Game:
             self.guide_frame_counters[action] = (idx + 1) % len(frames)
             self.guide_frame_timers[action] = 0
 
-    # ===== Audio =====
+    # Audio
     def play_detection_audio(self):
         action = self.actions[self.current_action]
         if action in self.detection_audio:
@@ -599,7 +596,6 @@ class Game:
             pygame.mixer.stop()
             snd = self.instruction_audio[action]
             snd.play()
-            # latency should start AFTER the audio ends
             self.t_prompt = None
             try:
                 self.t_prompt_end = time.perf_counter() + float(snd.get_length())
@@ -618,7 +614,7 @@ class Game:
     def stop_current_audio(self):
         pygame.mixer.stop()
 
-    # ===== Videos =====
+    # Videos
     def play_introduction_video(self):
         self.play_bookends_audio("introduction")
 
@@ -724,7 +720,7 @@ class Game:
         cap.release()
         cv2.destroyWindow("Chocks Inserted")
 
-    # ===== Buttons =====
+    # Buttons
     def button_over_detection(self, mouse_pos):
         for button in self.buttons.values():
             button[0] = button[4].collidepoint(mouse_pos)
@@ -741,14 +737,14 @@ class Game:
         if is_open and btn_rect.collidepoint(mouse_pos):
             return "VISIBILITY"
 
-    # ===== Quit =====
+    # Quit
     def release(self):
         self.cap.release()
 
 
 class GameOver:
     def __init__(self, win_size, signal_scores):
-        self.signal_scores = signal_scores  # {Pretty Label: score}
+        self.signal_scores = signal_scores
         self.init(win_size)
     
     def init(self, win_size):
@@ -984,22 +980,6 @@ def game_loop():
                         game.buttons["END TRAINING"][1] = False
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
-
-                # if event.key == pygame.K_w:  # !!!
-                #     game.current_action += 1
-                #     game.accepted_for_action = False
-                #     if game.current_action >= len(game.actions):
-                #         print(game.scores)
-                #         gameover = GameOver(win_size, game.scores)
-                #         game.assessment_stage = True
-                #         game.training_started = False
-                #         print("ASSESSMENT ENDED")
-                #     else:
-                #         print(game.scores)
-                #         game.instruction = game.actions[game.current_action]
-                #         game.setup_visual_instruction_text(game.instruction)
-                #         game.play_instruction_audio()
-                #         game.signal_detected = False
 
         if game.training_started:
             if not pygame.mixer.get_busy():
