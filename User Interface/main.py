@@ -2,6 +2,7 @@ import ctypes
 import numpy as np
 import os
 import pygame
+import requests
 import sys
 import time
 
@@ -25,7 +26,32 @@ def pretty_label(key):
         "cut_engine": "Cut Engines",
         "all_clear": "All Clear",
     }
-    return mapping.get(key, key.replace("_", " ").title())
+    return mapping[key]
+
+
+def command_converter(label):
+    mapping = {
+        "start_engine": "engine_on",
+        "straight_ahead": "forward",
+        "turn_left": "left",
+        "turn_right": "right",
+        "stop": "stop",
+        "cut_engine": "engine_off",
+    }
+    try:
+        return mapping[label]
+    except KeyError:
+        return 
+
+
+def send_command(command):
+    url = f"{base_url}/{command}"
+    try:
+        requests.get(url, timeout=1.0)
+        print(f"Sent command: {command}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error sending request to {url}: {e}")
+        print("Check that you are connected to the ESP8266's Wi-Fi network.")
 
 
 class Menu: 
@@ -1288,6 +1314,10 @@ def game_loop():
 
                 if event.key == pygame.K_w:
                     game.current_action += 1
+                    command = command_converter(game.actions[game.current_action])
+                    if command:
+                        send_command()
+
                     if game.current_action >= len(game.actions):
                         gameover = GameOver(win_size, game.scores)
                         game.assessment_stage = True
@@ -1304,6 +1334,9 @@ def game_loop():
                     if game.signal_detected:
                         game.current_action += 1
                         game.accepted_for_action = False
+                        command = command_converter(game.actions[game.current_action])
+                        if command:
+                            send_command()
                         if game.current_action >= len(game.actions):
                             game.assessment_stage = True
                             game.training_started = False
@@ -1359,6 +1392,9 @@ if __name__ == "__main__":
 
     icon = pygame.image.load(f"{resources_path}/icon.png")
     pygame.display.set_icon(icon)
+
+    ESP8266_IP = "192.168.4.1" 
+    base_url = f"http://{ESP8266_IP}"
 
     menu = Menu(win_size)
 
