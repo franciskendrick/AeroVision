@@ -1304,7 +1304,8 @@ def game_loop():
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
 
-                    elif btn_label == "VISIBILITY":
+                    btn_label = game.visibilitybtn_down_detection(mouse_pos)
+                    if btn_label == "VISIBILITY":
                         game.visibility_toggle = "+" if game.visibility_toggle == "X" else "X"
                         game.setup_visibility_buttons()
                 else:
