@@ -1074,8 +1074,7 @@ class GameOver:
         self.text_surfaces = []
 
         ordered_labels = [
-            "Start Engine", "Straight Ahead", "Turn Left", "Turn Right", "Stop"
-            "Set Brakes", "Chocks Inserted", "Cut Engines", "All Clear"
+            "Start Engine", "Straight Ahead", "Turn Left", "Turn Right", "Stop", "Set Brakes", "Chocks Inserted", "Cut Engines", "All Clear"
         ]
         total_score = 0
         count = 0
