@@ -1079,27 +1079,22 @@ class GameOver:
         total_score = 0
         count = 0
 
-        # Render rows in consistent order; skip missing ones gracefully
+        # Render rows in consistent order
+        formatted_scores = {}
         for label in ordered_labels:
-            if label in self.signal_scores:
-                score = float(self.signal_scores[label])
-                total_score += score
-                count += 1
-                text = f"{label}: {int(round(score))}%"
-                surface = self.font.render(text, True, (0, 0, 0))
-                self.text_surfaces.append(surface)
+            score = float(self.signal_scores[label])
+            total_score += score
+            count += 1
 
-        # Include any extra labels not in the standard ordering
-        for label, score in self.signal_scores.items():
-            if label not in ordered_labels:
-                total_score += float(score)
-                count += 1
-                text = f"{label}: {int(round(score))}%"
-                surface = self.font.render(text, True, (0, 0, 0))
-                self.text_surfaces.append(surface)
+            formatted_score = int(round(score))
+            formatted_scores[label] = formatted_score
+
+            text = f"{label}: {formatted_score}%"
+            surface = self.font.render(text, True, (0, 0, 0))
+            self.text_surfaces.append(surface)
 
         overall_pct, status, color = get_score(count, total_score)
-        save_scores_to_csv(self.signal_scores, overall_pct, status)
+        save_scores_to_csv(formatted_scores, overall_pct, status)
 
         self.overall_pct = overall_pct
         self.overall_surface = self.title_font.render(

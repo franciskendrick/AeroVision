@@ -42,7 +42,7 @@ pip install tensorflow
 ```
 
 ## How to Use
-- Run <code style="color: lightgreen;">_main.exe_</code>
+- Run _`main.exe`_
 
 ### Project Scructure
 <pre>
@@ -55,7 +55,7 @@ Ground Aircraft Marshalling Simulator/
 </pre>
 
 ## Output  
-Scores will be saved in <code style="color: white;">_scores.csv_</code> in this format:  
+Scores will be saved in _`scores.csv`_ in this format:  
 
 | Date & Time          | Start Engine | Straight Ahead | Turn Left | Turn Right | Stop | Set Brakes | Chocks Inserted | Cut Engines | All Clear | Overall Score | Status            |
 |----------------------|--------------|----------------|-----------|------------|------|------------|-----------------|-------------|-----------|---------------|-------------------|
