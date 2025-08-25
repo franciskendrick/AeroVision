@@ -9,15 +9,43 @@ import sys
 import time
 
 
+def resource_path(relative_path: str) -> str:
+    if getattr(sys, 'frozen', False):
+        # running in bundle
+        base = getattr(sys, '_MEIPASS', None)
+        if base:
+            return os.path.join(base, relative_path)
+        # fallback to executable dir (useful for --onedir)
+        return os.path.join(os.path.dirname(sys.executable), relative_path)
+    else:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
+
+
+# Module-level path used throughout your code (keeps existing variable name to minimize edits)
+resources_path = resource_path("resources")
+
+
+def get_user_data_dir(app_name="GroundAircraftMarshalling"):
+    if getattr(sys, 'frozen', False):
+        # Whether onefile or onedir, write next to the executable
+        return os.path.dirname(sys.executable)
+    else:
+        # Development mode: write next to the project folder
+        return os.path.dirname(os.path.abspath(__file__))
+
+
+user_data_dir = get_user_data_dir()
+os.makedirs(user_data_dir, exist_ok=True)
+
+
 def save_scores_to_csv(scores, overall_score, status):
-    filename = f"Ground Aircraft Marshalling Simulator/scores.csv"
+    # write scores.csv into a persistent user_data_dir (not the PyInstaller temp folder)
+    filename = os.path.join(user_data_dir, "scores.csv")
     file_exists = os.path.isfile(filename)
 
-    # Prepare row data
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     row = [now] + [scores.get(key, "") for key in scores.keys()] + [overall_score] + [status]
 
-    # Write header if file does not exist
     with open(filename, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
@@ -330,11 +358,11 @@ class Game:
         "chocks_inserted", "cut_engine", "start_engine", "stop",
         "straight_ahead", "turn_left", "turn_right"
     ]
-    # Model / detection
-    try:
-        MODEL_PATH = f"Ground Aircraft Marshalling Simulator/model.h5"
-    except FileNotFoundError:
-        MODEL_PATH = f"model.h5"
+    MODEL_PATH = resource_path("model.h5")
+    if getattr(sys, 'frozen', False):
+        exe_model = os.path.join(os.path.dirname(sys.executable), "model.h5")
+        if os.path.exists(exe_model):
+            MODEL_PATH = exe_model
     SEQUENCE_LENGTH = 90
     THRESHOLD       = 0.4
 
@@ -344,7 +372,6 @@ class Game:
     ACCEPT_N        = 5     # consecutive frames required to accept a detection
 
     def __init__(self, win_size):
-
         self.cap = cv2.VideoCapture(0)
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose()
@@ -505,7 +532,14 @@ class Game:
                 size = cfg["size"]
 
                 dir_path = os.path.join(resources_path, "guide_videos", action)
-                frame_paths = sorted([os.path.join(dir_path, f) for f in os.listdir(dir_path) if f.endswith(".jpg")])
+                if not os.path.isdir(dir_path):
+                    print(f"[GuideVideos] Missing directory: {dir_path}")
+                    frame_paths = []
+                else:
+                    frame_paths = sorted(
+                        [os.path.join(dir_path, f) for f in os.listdir(dir_path)
+                        if f.lower().endswith((".jpg", ".jpeg", ".png"))]
+                    )
                 frames = []
 
                 for path in frame_paths:
@@ -1337,46 +1371,23 @@ def game_loop():
                         game.button_states["START"] = True
                         game.button_states["END TRAINING"] = False
 
-                if event.key == pygame.K_w:
-                    game.current_action += 1
-                    try:
-                        command = command_converter(game.actions[game.current_action])
-                        if command:
-                            send_command(command)
-                    except IndexError:
-                        pass
-
-                    if game.current_action >= len(game.actions):
-                        gameover = GameOver(win_size, game.scores)
-                        game.assessment_stage = True
-                        game.training_started = False
-                    else:
-                        game.instruction = game.actions[game.current_action]
-                        game.setup_visual_instruction_text(game.instruction)
-                        game.play_instruction_audio()
-                        game.signal_detected = False
-
         if not game.assessment_stage:
             if game.training_started:
                 if not pygame.mixer.get_busy():
                     if game.signal_detected:
+                        command = command_converter(game.actions[game.current_action])
+                        if command:
+                            send_command(command)
+
                         game.current_action += 1
                         game.accepted_for_action = False
-
-                        try:
-                            command = command_converter(game.actions[game.current_action])
-                            if command:
-                                send_command(command)
-                        except IndexError:
-                            pass
-
+                        
                         if game.current_action >= len(game.actions):
                             game.assessment_stage = True
                             game.training_started = False
 
                             current_winsize = pygame.display.get_surface().get_size()
                             gameover = GameOver(current_winsize, game.scores)
-
                         else:
                             game.instruction = game.actions[game.current_action]
                             game.setup_visual_instruction_text(game.instruction)
@@ -1414,18 +1425,20 @@ if __name__ == "__main__":
     pygame.init()
     pygame.mixer.init()
 
-    resources_path = os.path.abspath(
-        os.path.join(
-            os.path.dirname(__file__), "resources"
-        )
-    )
-
     win_size = (640, 360)
     win = pygame.display.set_mode(win_size, pygame.RESIZABLE)
     pygame.display.set_caption("Ground Aircraft Marshalling Simulator")
 
-    icon = pygame.image.load(f"{resources_path}/icon.png")
-    pygame.display.set_icon(icon)
+    # resources_path is defined at module level via resource_path()
+    icon_path = os.path.join(resources_path, "icon.png")
+    if os.path.exists(icon_path):
+        try:
+            icon = pygame.image.load(icon_path)
+            pygame.display.set_icon(icon)
+        except Exception as e:
+            print(f"Warning: failed to load icon '{icon_path}': {e}")
+    else:
+        print(f"Warning: icon not found at {icon_path}")
 
     ESP8266_IP = "192.168.4.1" 
     base_url = f"http://{ESP8266_IP}"
