@@ -400,6 +400,14 @@ class Game:
         self.accept_counter = 0
         self.accepted_for_action = False
 
+        # Warning
+        self.last_warning_time = None
+        self.last_wrong_time = None
+        self.warning_played = False
+        self.first_warning_played = False
+        self.waiting_for_interval = False
+        self.audio_end_time = None
+
         self.init_scale(win_size)
         self.init_opencv(win_size)
         self.init_panels(win_size)
@@ -592,6 +600,17 @@ class Game:
                 else:
                     print(f"[Instruction] Missing: {filename}")
 
+        def load_warning_audio():
+            filename = "warning_audio.mp3"
+            path = os.path.join(resources_path, filename)
+            if os.path.exists(path):
+                try:
+                    self.warning_audio = pygame.mixer.Sound(path)
+                except pygame.error as e:
+                    print(f"[Detection] Failed to load '{filename}': {e}")
+            else:
+                print(f"[Detection] Missing: {filename}")
+                
         def load_chockesinserted_video():
             popup_path = os.path.join(resources_path, "chocks_inserted_popup.mp4")
             if os.path.exists(popup_path):
@@ -647,6 +666,7 @@ class Game:
         load_guide_videos()
         load_detection_audio()
         load_instruction_audio()
+        load_warning_audio()
         load_chockesinserted_video()
         load_bookends_audio()
         self.setup_visual_instruction_text(self.instruction)
@@ -713,17 +733,58 @@ class Game:
             return
         if self.current_action >= len(self.actions):
             return
-        required = self.actions[self.current_action]
 
-        # Gate by confidence and label
+        required = self.actions[self.current_action]
+        current_time = time.perf_counter()
+
+        # Correct signal resets everything
         if self.signal == required and self.confidence >= self.THRESHOLD:
             self.accept_counter += 1
+            self.last_wrong_time = None
+            self.first_warning_played = False
+            self.waiting_for_interval = False
+            self.audio_end_time = None
+
         else:
             self.accept_counter = 0
 
+            # Start wrong streak
+            if self.last_wrong_time is None:
+                self.last_wrong_time = current_time
+                self.first_warning_played = False
+                self.waiting_for_interval = False
+                self.audio_end_time = None
+
+            wrong_duration = current_time - self.last_wrong_time
+
+            # First warning after 5s 
+            if not self.first_warning_played and wrong_duration >= 5.0:
+                self.play_warning_audio()
+                self.first_warning_played = True
+                self.waiting_for_interval = True
+                self.audio_end_time = None  # we’ll detect when it stops
+
+            # Subsequent warnings 
+            elif self.first_warning_played:
+                if self.waiting_for_interval:
+                    # Wait until audio finishes before starting interval
+                    if not pygame.mixer.get_busy() and self.audio_end_time is None:
+                        self.audio_end_time = current_time  # mark when it actually stopped
+                else:
+                    # Count interval after audio finished
+                    interval = 5.0  
+                    if current_time - self.audio_end_time >= interval:
+                        self.play_warning_audio()
+                        self.waiting_for_interval = True
+                        self.audio_end_time = None
+
+                # Once audio is done, allow counting again
+                if self.audio_end_time is not None:
+                    self.waiting_for_interval = False
+
+        # Normal acceptance flow
         if (not self.accepted_for_action) and (self.accept_counter >= self.ACCEPT_N):
-            # Accept this detection
-            t_correct = time.perf_counter()
+            t_correct = current_time
             if self.t_prompt is None:
                 self.t_prompt = t_correct
             time_to_correct = max(0.0, t_correct - self.t_prompt)
@@ -739,7 +800,6 @@ class Game:
             if required == "chocks_inserted":
                 self.play_chocksinserted_video(get_pygame_window_pos())
 
-            # Play detection audio
             self.play_detection_audio()
 
     # Update / Inference
@@ -940,7 +1000,14 @@ class Game:
             self.bookends_audio[name].play()
         else:
             print(f"No bookend audio loaded for name '{name}'")
-            
+
+    def play_warning_audio(self):
+        pygame.mixer.stop()
+        try:
+            self.warning_audio.play()
+        except pygame.error:
+            print(f"No detection audio loaded for 'warning'")
+
     def stop_current_audio(self):
         pygame.mixer.stop()
 
