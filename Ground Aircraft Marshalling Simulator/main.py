@@ -614,7 +614,7 @@ class Game:
                     print(f"[Detection] Failed to load '{filename}': {e}")
             else:
                 print(f"[Detection] Missing: {filename}")
-                
+
         def load_chockesinserted_video():
             popup_path = os.path.join(resources_path, "chocks_inserted_popup.mp4")
             if os.path.exists(popup_path):
@@ -666,7 +666,7 @@ class Game:
         setup_layout()
         setup_prediction_text()
         setup_bookend_buttons()
-        self.setup_visibility_buttons()
+        self.setup_visibility_button()
         load_guide_videos()
         load_detection_audio()
         load_instruction_audio()
@@ -676,7 +676,7 @@ class Game:
         self.setup_visual_instruction_text(self.instruction)
         setup_progressbar()
 
-    def setup_visibility_buttons(self):
+    def setup_visibility_button(self):
         font_size = int(24 * self.scale)
         font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
         surface = font.render(self.visibility_toggle, True, (0, 0, 0))
@@ -1322,6 +1322,8 @@ class RealTime:
         self.init_opencv(win_size)
         self.init_panel(win_size)
         self.init_prediction_text()
+        self.init_buttons()
+        self.init_visibility_button()
 
     def init_scale(self, win_size):
         base_width, base_height = 640, 360
@@ -1404,14 +1406,49 @@ class RealTime:
         self.predicted_probability_surface = value_right
 
     def init_buttons(self):
-        pass
+        font_size = int(16 * self.scale)
+        font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
+        labels = ["BACK TO MENU", "END REAL-TIME"]
+        surfaces = [font.render(text, True, (0, 0, 0)) for text in labels]
+
+        padding_w = int(25 * self.scale)
+        padding_h = int(20 * self.scale)
+        rects = [s.get_rect() for s in surfaces]
+        width = max(r.width for r in rects) + padding_w
+        height = max(r.height for r in rects) + padding_h
+        y = self.bottom_panel.y + ((self.bottom_panel.height - height) // 2)
+        
+        self.buttons = {}
+        for i, (label, surface, rect) in enumerate(zip(labels, surfaces, rects)):
+            x = self.bottom_panel.left + int(20 * self.scale) if i == 0 else self.bottom_panel.right - width - int(20 * self.scale)
+            btn_rect = pygame.Rect(x, y, width, height)
+            text_pos = (x + (width - rect.width) // 2, y + (height - rect.height) // 2)
+            self.buttons[label] = [False, False, surface, text_pos, btn_rect]  # is_hovered, is_open, text, text_pos, btn_rect
+
+    def init_visibility_button(self):
+        font_size = int(24 * self.scale)
+        font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
+        surface = font.render(self.visibility_toggle, True, (0, 0, 0))
+
+        padding_w = int(25 * self.scale)
+        padding_h = int(14 * self.scale)
+        rect = surface.get_rect()
+        width = rect.width + padding_w
+        height = rect.height + padding_h
+        y = self.bottom_panel.y + ((self.bottom_panel.height - height) // 2)
+
+        x = self.bottom_panel.centerx - width // 2
+        btn_rect = pygame.Rect(x, y, width, height)
+        text_pos = (x + (width - rect.width) // 2, y + (height - rect.height) // 2)
+        self.visibility_button = [False, True, surface, text_pos, btn_rect]
 
     # Draw
     def draw(self, win):
         win.blit(self.background, (0, 0))
+        border_width = max(1, round(2 * self.scale))
 
         pygame.draw.rect(win, (192, 192, 192), self.top_panel)
-        pygame.draw.rect(win, (0, 0, 0), self.bottom_panel)
+        # pygame.draw.rect(win, (0, 0, 0), self.bottom_panel)
 
         if self.frame_surface:
             scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
@@ -1419,6 +1456,20 @@ class RealTime:
 
             for surface, pos in self.prediction_text_surfaces:
                 win.blit(surface, pos)
+
+            for is_hovered, is_open, text, text_pos, btn_rect in self.buttons.values():
+                fill = (192, 192, 192) if is_hovered and is_open else \
+                    (240, 240, 240) if is_open else (132, 132, 132)
+                pygame.draw.rect(win, fill, btn_rect)
+                pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
+                win.blit(text, text_pos)
+
+            is_hovered, is_open, text, text_pos, btn_rect = self.visibility_button
+            fill = (192, 192, 192) if is_hovered and is_open else \
+                    (240, 240, 240) if is_open else (132, 132, 132)
+            pygame.draw.rect(win, fill, btn_rect)
+            pygame.draw.rect(win, (0, 0, 0), btn_rect, border_width)
+            win.blit(text, text_pos)
 
     # Update / Interface
     def update_frame(self):
@@ -1647,7 +1698,7 @@ def game_loop():
                 btn_label = game.visibilitybtn_down_detection(mouse_pos)
                 if btn_label == "VISIBILITY":
                     game.visibility_toggle = "+" if game.visibility_toggle == "X" else "X"
-                    game.setup_visibility_buttons()
+                    game.setup_visibility_button()
 
             elif event.type == pygame.KEYDOWN:  # !!!
                 if event.key == pygame.K_SPACE:
@@ -1747,7 +1798,7 @@ def gameover_loop():
                 btn_label = game.visibilitybtn_down_detection(mouse_pos)
                 if btn_label == "VISIBILITY":
                     game.visibility_toggle = "+" if game.visibility_toggle == "X" else "X"
-                    game.setup_visibility_buttons()
+                    game.setup_visibility_button()
 
         # Audio
         if not pygame.mixer.get_busy():
@@ -1795,6 +1846,8 @@ def realtime_loop():
                 realtime.init_opencv(new_size)
                 realtime.init_panel(new_size)
                 realtime.init_prediction_text()
+                realtime.init_buttons()
+                realtime.init_visibility_button()
 
         realtime.update_frame()
 
