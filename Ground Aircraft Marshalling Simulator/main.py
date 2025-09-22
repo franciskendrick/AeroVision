@@ -1289,18 +1289,234 @@ class GameOver:
 
 
 class RealTime:
-    def __init__(self):
+    ACTIONS = [
+        "chocks_inserted", "cut_engine", "start_engine", "stop",
+        "straight_ahead", "turn_left", "turn_right"
+    ]
+    MODEL_PATH = resource_path("model.h5")
+    if getattr(sys, 'frozen', False):
+        exe_model = os.path.join(os.path.dirname(sys.executable), "model.h5")
+        if os.path.exists(exe_model):
+            MODEL_PATH = exe_model
+    SEQUENCE_LENGTH = 90
+    THRESHOLD       = 0.4
+
+    # Scoring parameters (lead's formula)
+    PENALTY_RATE    = 5.0   # percent per second
+    TMAX            = 20.0  # seconds; cap for TimeToCorrectError; TimetocorrectMAX
+    ACCEPT_N        = 5     # consecutive frames required to accept a detection
+
+    def __init__(self, win_size):
+        self.cap = cv2.VideoCapture(0)
+        self.mp_pose = mp.solutions.pose
+        self.pose = self.mp_pose.Pose()
+        self.mp_drawing = mp.solutions.drawing_utils
+        if not self.cap.isOpened():
+            print("Could not open camera.")
+            pygame.quit()
+            sys.exit()
+
+        self.visibility_toggle = "X"
+
+        self.init_scale(win_size)
+        self.init_opencv(win_size)
+        self.init_panel(win_size)
+        self.init_prediction_text()
+
+    def init_scale(self, win_size):
+        base_width, base_height = 640, 360
+        scale_w = win_size[0] / base_width
+        scale_h = win_size[1] / base_height
+        self.scale = min(scale_w, scale_h)
+
+    def init_opencv(self, win_size):
+        # Dummy frame to calculate aspect ratio
+        ret, frame = self.cap.read()
+        if not ret:
+            print("Failed to read dummy frame for init.")
+            pygame.quit()
+            sys.exit()
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = np.rot90(frame)
+        dummy_surface = pygame.surfarray.make_surface(frame)
+
+        cam_rect = dummy_surface.get_rect()
+        max_width = win_size[0] // 1.75
+        max_height = win_size[1]
+
+        self.model = load_model(self.MODEL_PATH)
+        self.sequence = []
+        self.signal = "NONE"
+        self.confidence = 0.0
+
+        scale = min(max_width / cam_rect.width, max_height / cam_rect.height)
+        new_size = (int(cam_rect.width * scale), int(cam_rect.height * scale))
+        self.frame_draw_size = new_size
+
+        pos_x = (win_size[0] - new_size[0]) // 2
+        pos_y = (win_size[1] - new_size[1]) // 2
+        self.frame_draw_pos = (pos_x, pos_y)
+
+    def init_panel(self, win_size):
+        background = pygame.image.load(f"{resources_path}/background.png")
+        self.background = pygame.transform.scale(background, win_size)
+
+        self.top_panel = pygame.Rect(
+            self.frame_draw_pos[0], 0, 
+            win_size[0] // 1.75, self.frame_draw_pos[1])
+        self.bottom_panel = pygame.Rect(
+            self.frame_draw_pos[0], win_size[1] - self.frame_draw_pos[1], 
+            win_size[0] // 1.75, self.frame_draw_pos[1])
+
+    def init_prediction_text(self):
+        small_size = int(self.top_panel.height * 0.45)
+        big_size = int(self.top_panel.height * 0.7875)
+        font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
+        font_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_size)
+
+        label_left = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0))
+        value_left = font_big.render(self.signal, True, (0, 0, 0))
+        label_right = font_small.render("PROBABILITY:", True, (0, 0, 0))
+        value_right = font_big.render(f"{self.confidence * 100:.0f}%", True, (0, 0, 0))
+
+        label_left_rect = label_left.get_rect()
+        value_left_rect = value_left.get_rect()
+        label_right_rect = label_right.get_rect()
+        value_right_rect = value_right.get_rect()
+
+        spacing = int(2 * self.scale)
+        row_height = label_left_rect.height + value_left_rect.height + spacing
+        y_start = self.top_panel.centery - row_height // 2
+
+        margin = int(15 * self.scale)
+        left_x = self.top_panel.left + margin
+        right_x = self.top_panel.right - margin
+
+        self.prediction_text_surfaces = [
+            (label_left, (left_x, y_start)),
+            (value_left, (left_x, y_start + label_left_rect.height + spacing)),
+            (label_right, (right_x - label_right_rect.width, y_start)),
+            (value_right, (right_x - value_right_rect.width, y_start + label_right_rect.height + spacing)),
+        ]
+
+        self.predicted_label_surface = value_left
+        self.predicted_probability_surface = value_right
+
+    def init_buttons(self):
         pass
 
-    def draw(self):
-        pass
+    # Draw
+    def draw(self, win):
+        win.blit(self.background, (0, 0))
 
-    def update(self):
-        pass
+        pygame.draw.rect(win, (192, 192, 192), self.top_panel)
+        pygame.draw.rect(win, (0, 0, 0), self.bottom_panel)
+
+        if self.frame_surface:
+            scaled_frame = pygame.transform.smoothscale(self.frame_surface, self.frame_draw_size)
+            win.blit(scaled_frame, self.frame_draw_pos)
+
+            for surface, pos in self.prediction_text_surfaces:
+                win.blit(surface, pos)
+
+    # Update / Interface
+    def update_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        frame = cv2.flip(frame, 1)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # MediaPipe Pose processing
+        results = self.pose.process(frame_rgb)
+        if results.pose_landmarks and self.visibility_toggle == "X":
+            self.mp_drawing.draw_landmarks(
+                frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS,
+                landmark_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2),
+                connection_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2)
+            )
+
+        # Keypoint vector
+        keypoints = self.extract_keypoints_full(results)
+        self.sequence.append(keypoints)
+        if len(self.sequence) > self.SEQUENCE_LENGTH:
+            self.sequence.pop(0)
+
+        # Heuristic overrides for All Clear and Set Brakes (sets 100% confidence)
+        signal = ""
+        if results.pose_landmarks:
+            lm = results.pose_landmarks.landmark
+            right_wrist_y = lm[15].y
+            right_elbow_y = lm[14].y
+            left_wrist_y = lm[16].y
+            left_hip_y = lm[23].y
+            right_shoulder_y = lm[12].y
+            right_eye = lm[5].y
+            
+            if (right_wrist_y < right_eye and right_wrist_y < right_elbow_y and
+                    left_wrist_y > left_hip_y):
+                signal = "all_clear"
+                self.signal = signal
+                self.confidence = 1.0
+                self.update_prediction_text()
+            elif (right_wrist_y < right_shoulder_y and right_wrist_y < right_elbow_y and
+                    left_wrist_y > left_hip_y):
+                signal = "set_brakes"
+                self.signal = signal
+                self.confidence = 1.0
+                self.update_prediction_text()
+
+        # Model prediction if no heuristic match
+        if signal == "" and len(self.sequence) == self.SEQUENCE_LENGTH:
+            input_seq = np.expand_dims(np.array(self.sequence), axis=0)  # shape: (1, 90, 99)
+            probs = self.model.predict(input_seq, verbose=0)[0]
+            max_idx = np.argmax(probs)
+            self.confidence = float(probs[max_idx])
+            if self.confidence > self.THRESHOLD:
+                self.signal = self.ACTIONS[max_idx]
+                self.update_prediction_text()
+
+        # Convert for Pygame (after drawing)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_rgb = cv2.flip(frame_rgb, 1)
+        frame_rgb = np.rot90(frame_rgb)
+        self.frame_surface = pygame.surfarray.make_surface(frame_rgb)
+
+    def extract_keypoints_full(self, results):
+        if not results.pose_landmarks:
+            return np.zeros(33 * 3)
+        return np.array([[lm.x, lm.y, lm.z] for lm in results.pose_landmarks.landmark]).flatten()
+
+    def update_prediction_text(self):
+        big_size = int(self.top_panel.height * 0.7875)
+        font_big = pygame.font.SysFont("Franklin Gothic Medium Condensed", big_size)
+
+        formatted_signal = self.signal.replace("_", " ").upper()
+        value_left = font_big.render(formatted_signal, True, (0, 0, 0))
+        value_right = font_big.render(f"{self.confidence * 100:.0f}%", True, (0, 0, 0))
+
+        self.predicted_label_surface = value_left
+        self.predicted_probability_surface = value_right
+
+        spacing = int(2 * self.scale)
+        small_size = int(self.top_panel.height * 0.45)
+        font_small = pygame.font.SysFont("Franklin Gothic Medium Condensed", small_size)
+        label_left_rect = font_small.render("SIGNAL PREDICTION:", True, (0, 0, 0)).get_rect()
+        label_right_rect = font_small.render("PROBABILITY:", True, (0, 0, 0)).get_rect()
+        row_height = label_left_rect.height + value_left.get_rect().height + spacing
+        y_start = self.top_panel.centery - row_height // 2
+        margin = int(15 * self.scale)
+        left_x = self.top_panel.left + margin
+        right_x = self.top_panel.right - margin
+
+        self.prediction_text_surfaces[1] = (value_left, (left_x, y_start + label_left_rect.height + spacing))
+        self.prediction_text_surfaces[3] = (value_right, (right_x - value_right.get_width(), y_start + label_right_rect.height + spacing))
 
 
 def menu_loop():
-    global game
+    global game, realtime
     run = True
     while run:
         for event in pygame.event.get():
@@ -1335,7 +1551,6 @@ def menu_loop():
                 menu.popup_active = was_popup_active
                 menu.buttons["TRAINING & ASSESSMENT"][1] = start_button_state
                 menu.buttons["REAL-TIME"][1] = start_button_state
-                menu.buttons[""][1] = start_button_state
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
@@ -1350,6 +1565,9 @@ def menu_loop():
                     menu.popup_active = True
                 elif btn_label == "REAL-TIME":
                     run = False
+                    
+                    current_winsize = pygame.display.get_surface().get_size()
+                    realtime = RealTime(current_winsize)
 
                     realtime_loop()
                 elif btn_label == "TRAINING & ASSESSMENT":
@@ -1558,15 +1776,29 @@ def gameover_loop():
 
 
 def realtime_loop():
-    realtime = RealTime()
-
     run = True
     while run:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
 
-        realtime.draw()
+            elif event.type == pygame.VIDEORESIZE:
+                # Enforce minimum size of 640x360
+                new_width = max(640, event.w)
+                new_height = max(360, event.h)
+                new_size = (new_width, new_height)
+
+                pygame.display.set_mode(new_size, pygame.RESIZABLE)
+
+                # Reinitialize
+                realtime.init_scale(new_size)
+                realtime.init_opencv(new_size)
+                realtime.init_panel(new_size)
+                realtime.init_prediction_text()
+
+        realtime.update_frame()
+
+        realtime.draw(win)
         pygame.display.update()
 
     pygame.quit()
