@@ -114,10 +114,10 @@ def command_converter(label):
         return 
 
 
-def send_command(command):
+def send_command(command, timeout=1.0):
     url = f"{base_url}/{command}"
     try:
-        requests.get(url, timeout=1.0)
+        requests.get(url, timeout=timeout)
         print(f"Sent command: {command}")
     except requests.exceptions.RequestException as e:
         print(f"Error sending request to {url}: {e}")
@@ -1316,7 +1316,12 @@ class RealTime:
             pygame.quit()
             sys.exit()
 
+        self.realtime_started = False
         self.visibility_toggle = "X"
+        self.actions = [
+            "start_engine", "straight_ahead", "turn_left", "turn_right",
+            "stop", "set_brakes", "chocks_inserted", "cut_engine", "all_clear"
+        ]
 
         self.init_scale(win_size)
         self.init_opencv(win_size)
@@ -1408,7 +1413,7 @@ class RealTime:
     def init_buttons(self):
         font_size = int(16 * self.scale)
         font = pygame.font.SysFont("Franklin Gothic Medium Condensed", font_size)
-        labels = ["BACK TO MENU", "END REAL-TIME"]
+        labels = ["BACK TO MENU", "START REAL-TIME"]
         surfaces = [font.render(text, True, (0, 0, 0)) for text in labels]
 
         padding_w = int(25 * self.scale)
@@ -1423,7 +1428,7 @@ class RealTime:
             x = self.bottom_panel.left + int(20 * self.scale) if i == 0 else self.bottom_panel.right - width - int(20 * self.scale)
             btn_rect = pygame.Rect(x, y, width, height)
             text_pos = (x + (width - rect.width) // 2, y + (height - rect.height) // 2)
-            self.buttons[label] = [False, False, surface, text_pos, btn_rect]  # is_hovered, is_open, text, text_pos, btn_rect
+            self.buttons[label] = [False, True, surface, text_pos, btn_rect]  # is_hovered, is_open, text, text_pos, btn_rect
 
     def init_visibility_button(self):
         font_size = int(24 * self.scale)
@@ -1565,6 +1570,29 @@ class RealTime:
         self.prediction_text_surfaces[1] = (value_left, (left_x, y_start + label_left_rect.height + spacing))
         self.prediction_text_surfaces[3] = (value_right, (right_x - value_right.get_width(), y_start + label_right_rect.height + spacing))
 
+    # Buttons
+    def button_over_detection(self, mouse_pos):
+        for button in self.buttons.values():
+            button[0] = button[4].collidepoint(mouse_pos)
+
+        self.visibilitybtn_over_detection(mouse_pos)
+
+    def visibilitybtn_over_detection(self, mouse_pos):
+        button = self.visibility_button
+        button[0] = button[4].collidepoint(mouse_pos)
+
+    def button_down_detection(self, mouse_pos):
+        for label, (_, is_open, *_, btn_rect) in self.buttons.items():
+            if is_open and btn_rect.collidepoint(mouse_pos):
+                return label
+            
+        self.visibilitybtn_down_detection(mouse_pos)
+
+    def visibilitybtn_down_detection(self, mouse_pos):
+        _, is_open, *_, btn_rect = self.visibility_button
+        if is_open and btn_rect.collidepoint(mouse_pos):
+            return "VISIBILITY"
+
 
 def menu_loop():
     global game, realtime
@@ -1616,9 +1644,6 @@ def menu_loop():
                     menu.popup_active = True
                 elif btn_label == "REAL-TIME":
                     run = False
-                    
-                    current_winsize = pygame.display.get_surface().get_size()
-                    realtime = RealTime(current_winsize)
 
                     realtime_loop()
                 elif btn_label == "TRAINING & ASSESSMENT":
@@ -1639,6 +1664,7 @@ def menu_loop():
 
             current_winsize = pygame.display.get_surface().get_size()
             game = Game(current_winsize)
+            realtime = RealTime(current_winsize)
             menu.game_initialized = True
             menu.game_loading = False
             menu.buttons["TRAINING & ASSESSMENT"][1] = True
@@ -1849,9 +1875,33 @@ def realtime_loop():
                 realtime.init_buttons()
                 realtime.init_visibility_button()
 
-        realtime.update_frame()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pos = pygame.mouse.get_pos()
 
+                btn_label = realtime.button_down_detection(mouse_pos)
+                if btn_label == "BACK TO MENU":
+                    run = False
+
+                    menu_loop()
+                elif btn_label == "START REAL-TIME":
+                    realtime.realtime_started = True
+
+                btn_label = realtime.visibilitybtn_down_detection(mouse_pos)
+                if btn_label == "VISIBILITY":
+                    realtime.visibility_toggle = "+" if realtime.visibility_toggle == "X" else "X"
+                    realtime.init_visibility_button()
+
+        if realtime.realtime_started:
+            command = command_converter(realtime.signal)
+            if command:
+                send_command(command, timeout=0.1)
+
+        realtime.update_frame()
         realtime.draw(win)
+
+        mouse_pos = pygame.mouse.get_pos()
+        realtime.button_over_detection(mouse_pos)
+
         pygame.display.update()
 
     pygame.quit()
