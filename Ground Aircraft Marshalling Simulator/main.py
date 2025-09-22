@@ -177,28 +177,28 @@ class Menu:
         else:
             current_y -= self.spacing * 6
 
-        button_labels = ["CONNECT TO PROTOTYPE", "START"]
+        button_labels = ["CONNECT TO PROTOTYPE", "REAL-TIME", "TRAINING & ASSESSMENT"]
         button_surfaces = [franklingothic_small.render(label, True, (0, 0, 0)) for label in button_labels]
 
         marshalling_surface = self.texts[2][0]
         marshalling_rect = marshalling_surface.get_rect()
         marshalling_x = win_size[0] // 2 - marshalling_rect.width // 2
-        marshalling_right = marshalling_x + marshalling_rect.width
+        marshalling_center_x = marshalling_x + marshalling_rect.width // 2
 
         base_padding_w, base_padding_h = 25, 20
         padding_w = int(base_padding_w * self.scale)
         padding_h = int(base_padding_h * self.scale)
 
+        # spacing between buttons
+        spacing = int(15 * self.scale)
+
         self.buttons = {}
+        total_width = sum(surface.get_rect().width + padding_w for surface in button_surfaces) + spacing * (len(button_labels) - 1)
+        start_x = marshalling_center_x - total_width // 2
+
         for idx, (label, surface) in enumerate(zip(button_labels, button_surfaces)):
             text_rect = surface.get_rect()
-            if idx == 0:
-                open_status = True
-                x = marshalling_x
-            else:
-                open_status = False
-                x = marshalling_right - text_rect.width
-
+            x = start_x
             y = current_y
 
             button_rect = pygame.Rect(
@@ -211,7 +211,11 @@ class Menu:
             text_x = button_rect.x + (button_rect.width - text_rect.width) // 2
             text_y = button_rect.y + (button_rect.height - text_rect.height) // 2
 
-            self.buttons[label] = [False, open_status, surface, (text_x, text_y), button_rect]
+            # Only the first button starts "open" like before
+            self.buttons[label] = [False, (idx == 0), surface, (text_x, text_y), button_rect]
+
+            # move x for next button
+            start_x += text_rect.width + padding_w + spacing
 
     def init_popup(self, win_size):
         popup_lines = [
@@ -1284,6 +1288,17 @@ class GameOver:
                 return label
 
 
+class RealTime:
+    def __init__(self):
+        pass
+
+    def draw(self):
+        pass
+
+    def update(self):
+        pass
+
+
 def menu_loop():
     global game
     run = True
@@ -1302,7 +1317,8 @@ def menu_loop():
 
                 # Save state
                 was_popup_active = menu.popup_active
-                start_button_state = menu.buttons["START"][1]  # True if it was open
+                start_button_state = menu.buttons["TRAINING & ASSESSMENT"][1]  # True if it was open
+                start_button_state = menu.buttons["REAL-TIME"][1]  # True if it was open
 
                 # Reinitialize
                 menu.init_scale(new_size)
@@ -1317,7 +1333,9 @@ def menu_loop():
 
                 # Restore state
                 menu.popup_active = was_popup_active
-                menu.buttons["START"][1] = start_button_state
+                menu.buttons["TRAINING & ASSESSMENT"][1] = start_button_state
+                menu.buttons["REAL-TIME"][1] = start_button_state
+                menu.buttons[""][1] = start_button_state
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
@@ -1330,7 +1348,11 @@ def menu_loop():
                     if not menu.game_initialized:
                         menu.game_loading = True
                     menu.popup_active = True
-                elif btn_label == "START":
+                elif btn_label == "REAL-TIME":
+                    run = False
+
+                    realtime_loop()
+                elif btn_label == "TRAINING & ASSESSMENT":
                     run = False
 
                     game.play_introduction_video()
@@ -1350,7 +1372,8 @@ def menu_loop():
             game = Game(current_winsize)
             menu.game_initialized = True
             menu.game_loading = False
-            menu.buttons["START"][1] = True
+            menu.buttons["TRAINING & ASSESSMENT"][1] = True
+            menu.buttons["REAL-TIME"][1] = True
 
     pygame.quit()
     sys.exit()
@@ -1377,7 +1400,7 @@ def game_loop():
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
-                
+
                 btn_label = game.button_down_detection(mouse_pos)
                 if btn_label == "START":
                     game.training_started = True
@@ -1534,6 +1557,22 @@ def gameover_loop():
     sys.exit()
 
 
+def realtime_loop():
+    realtime = RealTime()
+
+    run = True
+    while run:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+
+        realtime.draw()
+        pygame.display.update()
+
+    pygame.quit()
+    sys.exit()
+
+
 if __name__ == "__main__":
     pygame.init()
     pygame.mixer.init()
@@ -1559,4 +1598,4 @@ if __name__ == "__main__":
     menu = Menu(win_size)
 
     menu_loop()
-    # gameover_loop()
+    # realtime_loop()
