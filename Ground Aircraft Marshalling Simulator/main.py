@@ -376,7 +376,7 @@ class Game:
     ACCEPT_N        = 5     # consecutive frames required to accept a detection
 
     def __init__(self, win_size):
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose()
         self.mp_drawing = mp.solutions.drawing_utils
@@ -1307,7 +1307,7 @@ class RealTime:
     ACCEPT_N        = 5     # consecutive frames required to accept a detection
 
     def __init__(self, win_size):
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose()
         self.mp_drawing = mp.solutions.drawing_utils
@@ -1779,12 +1779,13 @@ def game_loop():
 
 
 def gameover_loop():
+    global game
     # global cv2, load_model, mp
     # import cv2
     # from keras._tf_keras.keras.models import load_model
     # import mediapipe as mp
 
-    current_winsize = pygame.display.get_surface().get_size()  # !!!
+    current_winsize = pygame.display.get_surface().get_size()
     # game = Game(current_winsize)  # !!!
     # game.scores = {'Start Engine': 84.15564000002632, 'Straight Ahead': 32.85263000005216, 'Turn Left': 83.62119249999523, 'Turn Right': 94.3293624999933, 'Stop': 90.04987099993741, 'Set Brakes': 96.57333549999748, 'Chocks Inserted': 87.63132899999619, 'Cut Engines': 85.63987800000177, 'All Clear': 81.64309599997068}
     gameover = GameOver(current_winsize, game.scores)
@@ -1800,8 +1801,27 @@ def gameover_loop():
                 if btn_label == "Exit":
                     run = False
 
+                    current_winsize = pygame.display.get_surface().get_size()
+                    game.release()
+
+                    game.__init__(current_winsize)
+                    game.assessment_stage = False
+                    game.training_started = False
+                    game.signal_detected = False
+                    game.buttons["START"][1] = False
+                    game.buttons["END TRAINING"][1] = False
+                    game.button_states["START"] = False
+                    game.button_states["END TRAINING"] = False
+                    game.instruction = "None"
+                    game.setup_visual_instruction_text(game.instruction)
+
+                    menu.popup_active = False
+
+                    menu_loop()
+
                 elif btn_label == "Retake Mission":
                     current_winsize = pygame.display.get_surface().get_size()
+                    game.release()
 
                     # Re-init Game
                     game.__init__(current_winsize)
@@ -1894,7 +1914,7 @@ def realtime_loop():
         if realtime.realtime_started:
             command = command_converter(realtime.signal)
             if command:
-                send_command(command, timeout=0.1)
+                send_command(command, timeout=0.1)  # timeout can be changed
 
         realtime.update_frame()
         realtime.draw(win)
